@@ -6,7 +6,7 @@
  * The PNG bytes return to the Worker, which persists the artifact row.
  *
  * Security: the window is created sandboxed (no preload, no Node integration,
- * default webSecurity) so page JS executes like a browser opening a local file.
+ * default webSecurity) with document JavaScript disabled.
  * Navigation is restricted to the requested URL; popups and new windows are
  * suppressed.
  */
@@ -38,6 +38,7 @@ export async function renderDocumentThumbnail(
   logger: AppLogger,
 ): Promise<DocumentThumbnailRenderResponse['result']> {
   let window: BrowserWindow | null = null;
+  const deadline = setTimeout(() => window?.destroy(), 15_000);
   try {
     window = new BrowserWindow({
       // `useContentSize` makes width/height the *page* viewport: without it the
@@ -51,6 +52,7 @@ export async function renderDocumentThumbnail(
         sandbox: true,
         contextIsolation: true,
         nodeIntegration: false,
+        javascript: false,
         // No preload: the page must not receive any extra capability.
         webSecurity: true,
       },
@@ -61,18 +63,9 @@ export async function renderDocumentThumbnail(
       if (url !== request.url) event.preventDefault();
     });
     await window.loadURL(request.url);
-    // Wait for the page's own layout/font readiness instead of guessing that
-    // every document settles within a fixed wall-clock window. `loadURL`
-    // already waits for the document load event; `document.fonts.ready` and
-    // two animation frames cover late font/layout commits without imposing a
-    // deadline on a large or slow local HTML asset.
-    await window.webContents.executeJavaScript(`
-      (async () => {
-        if (document.fonts?.ready) await document.fonts.ready;
-        await new Promise((resolve) => requestAnimationFrame(() => resolve()));
-        await new Promise((resolve) => requestAnimationFrame(() => resolve()));
-      })()
-    `, true);
+    // The load event covers this static document's resources. Page JavaScript
+    // is disabled, including injected readiness scripts; capturePage requests
+    // a committed frame without executing any code from the document.
     if (window.isDestroyed()) {
       return {
         status: 'failed',
@@ -112,6 +105,7 @@ export async function renderDocumentThumbnail(
       reason: error instanceof Error ? error.message : 'document load failed',
     };
   } finally {
+    clearTimeout(deadline);
     try {
       window?.destroy();
     } catch {

@@ -42,6 +42,23 @@ const REQUIRED_FILTERS = [
   'aformat', 'compand', 'showwavespic',
 ];
 
+/** Match trust metadata for the platform being built. Updates for other OSes
+ * must not invalidate a checksum-pinned archive for this platform. */
+export function assertMatchingMediaSources(local, archive, platform) {
+  const relevant = (lock) => ({
+    schemaVersion: lock.schemaVersion,
+    registry: lock.registry,
+    vcpkgTool: lock.vcpkgTool,
+    components: expectedComponents(lock, platform),
+  });
+  const canonical = (value) => value && typeof value === 'object'
+    ? Array.isArray(value) ? value.map(canonical) : Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]))
+    : value;
+  if (JSON.stringify(canonical(relevant(local))) !== JSON.stringify(canonical(relevant(archive)))) {
+    throw new Error(`Media bundle source-lock.json does not match this checkout for ${platform}; update trust metadata separately.`);
+  }
+}
+
 export function currentPlatformKey() {
   if (process.platform === 'darwin' && process.arch === 'arm64') {
     return 'darwin-arm64';

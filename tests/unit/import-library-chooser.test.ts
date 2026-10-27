@@ -173,7 +173,7 @@ describe("OpenLibraryChooserDialog", () => {
       );
 
     expect(findButton(/打开 Eagle 资源库/)).toBeUndefined();
-    const serpent = findButton(/打开 Serpent 资源库/);
+    const serpent = findButton(/打开 Gen Library 资源库/);
     expect(serpent).toBeDefined();
 
     const disclosure = findButton(/打开外部资源库/);

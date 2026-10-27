@@ -1,3 +1,4 @@
+import { trashLinkedSource } from './trash-linked-source';
 import { randomUUID, createHash } from 'node:crypto';
 import {
   accessSync,
@@ -5248,16 +5249,8 @@ const DEFAULT_ASSET_OBSERVER_FACTORY: AssetObserverFactory = (assetsPath, onEven
   return observer;
 };
 
-/**
- * 永久删除一个链接资产的源文件。
- *
- * 2026-09-15 用户决定：链接资产/文件夹的删除动作就是「强制从硬盘删除」，不再使用
- * 系统回收站。旧实现为每个文件 spawn 一次 `trash` 的本地 helper（实测 126 ms/文件，
- * 1.5 万文件约 31 分钟，并且全程独占 Worker 调度器），既慢又不可在库内恢复。
- */
-async function defaultRemoveLinkedSourceFile(sourcePath: string): Promise<void> {
-  await rmAsync(sourcePath, { force: true, maxRetries: 5, retryDelay: 120 });
-}
+/** Move a linked source to the operating system Trash. No permanent-delete fallback. */
+const defaultRemoveLinkedSourceFile = trashLinkedSource;
 
 export class SimulatedCrashError extends Error {}
 

@@ -1,3 +1,4 @@
+import { APP_ID, APP_NAME } from './src/shared/brand';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -62,6 +63,7 @@ const config: ForgeConfig = {
       // the app bundle (Contents/Resources/extension) for manual loading.
       // Rebuild it so the package always carries the current sources.
       runNodeGate('scripts/build-extension.mjs', []);
+      runNodeGate('scripts/generate-automation-api.mjs', []);
     },
     postPackage: async (_forgeConfig, packageResult) => {
       nativeMediaPlatform(packageResult.platform, packageResult.arch);
@@ -79,17 +81,21 @@ const config: ForgeConfig = {
       const mediaPlatform = nativeMediaPlatform(process.platform, process.arch);
       runNodeGate('scripts/media-binaries.mjs', ['ensure', '--platform', mediaPlatform]);
       runNodeGate('scripts/verify-package.mjs', [], {
-        SERPENT_PACKAGE_ROOT: path.join(projectRoot, 'out', `Serpent-${mediaPlatform}`),
+        SERPENT_PACKAGE_ROOT: path.join(projectRoot, 'out', `${APP_NAME}-${mediaPlatform}`),
         SERPENT_PACKAGE_PLATFORM: mediaPlatform,
       });
     },
   },
   packagerConfig: {
+    name: APP_NAME,
+    appBundleId: APP_ID,
+    download: { cacheRoot: path.join(projectRoot, '.cache', 'electron-downloads') },
+    tmpdir: path.join(projectRoot, '..', 'runtime-cache', 'packager'),
     icon: appIconBase,
     asar: {
       unpack:
-        // 2026-09-15：链接删除改为永久删除源文件后，产品不再调用系统回收站，
-        // `trash` 依赖与其本地 helper 已移除，这里不再需要解包它。
+        // OS Trash helpers must execute outside the archive.
+        '**/node_modules/trash/**,**/node_modules/macos-trash/**,' +
         '**/node_modules/libarchive-wasm/dist/libarchive.wasm,' +
         // sqlite-vec loads its pinned platform extension through SQLite's
         // loadExtension API; dynamic libraries cannot be loaded from app.asar.

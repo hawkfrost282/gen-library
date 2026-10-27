@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -15,6 +15,7 @@ import {
   runtimeArchiveEntryAllowed,
   semanticModelPackageBytes,
   downloadEmbeddingFile,
+  verifiedEmbeddingDownload,
   uninstallSemanticModelFiles,
 } from "../../src/main/embedding-install";
 import { EMBEDDING_GEMMA2_MODEL_REVISION } from "../../src/shared/embedding/profile";
@@ -95,35 +96,39 @@ describe("embedding install download sizing", () => {
     })).toBeGreaterThan(600_000_000);
   });
 
-  it("falls back across github mirrors when the first candidate fails", async () => {
-    const root = mkdtempSync(path.join(tmpdir(), "serpent-embed-dl-"));
+  it("fails closed without trying untrusted mirrors", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "gen-library-embed-dl-"));
     const destination = path.join(root, "llama.tar.gz");
-    let attempts = 0;
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      attempts += 1;
-      const url = String(input);
-      if (attempts === 1) {
-        return new Response("nope", { status: 502 });
-      }
-      expect(url.includes("ghproxy")).toBe(true);
-      return new Response(Uint8Array.from([1, 2, 3, 4]), {
-        status: 200,
-        headers: { "content-length": "4" },
-      });
-    }) as typeof fetch;
+    const urls: string[] = [];
+    globalThis.fetch = (async (input) => { urls.push(String(input)); return new Response("nope", { status: 502 }); }) as typeof fetch;
     try {
-      await downloadEmbeddingFile(
-        "https://github.com/ggml-org/llama.cpp/releases/download/b11457/llama-b11457-bin-macos-arm64.tar.gz",
-        destination,
-        { stallTimeoutMs: 200 },
-      );
-      expect(attempts).toBeGreaterThanOrEqual(2);
-      expect(readFileSync(destination).byteLength).toBe(4);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+      await expect(downloadEmbeddingFile(pinnedLlamaRuntimeUrl("llama-b11457-bin-macos-arm64.tar.gz"), destination, { stallTimeoutMs: 200 })).rejects.toThrow();
+      expect(urls.length).toBeGreaterThan(0);
+      expect(urls.every((url) => url.startsWith("https://github.com/ggml-org/llama.cpp/"))).toBe(true);
+      expect(existsSync(destination)).toBe(false);
+    } finally { globalThis.fetch = originalFetch; }
   });
+
+  it("rejects truncated downloads before replacing an existing file", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "gen-library-integrity-"));
+    const destination = path.join(root, "llama.tar.gz");
+    writeFileSync(destination, "previous verified file");
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(Uint8Array.from([1, 2, 3, 4]), { status: 200, headers: { "content-length": "4" } })) as typeof fetch;
+    try {
+      await expect(downloadEmbeddingFile(pinnedLlamaRuntimeUrl("llama-b11457-bin-macos-arm64.tar.gz"), destination)).rejects.toThrow();
+      expect(readFileSync(destination, "utf8")).toBe("previous verified file");
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
+  it("rejects alternate hosts and unpinned revisions even with a known filename", () => {
+    const official = pinnedLlamaRuntimeUrl("llama-b11457-bin-macos-arm64.tar.gz");
+    expect(verifiedEmbeddingDownload(official).sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(() => verifiedEmbeddingDownload(official.replace("github.com", "example.com"))).toThrow();
+    expect(() => verifiedEmbeddingDownload(official.replace("b11457/", "latest/"))).toThrow();
+  });
+
 });
 
 

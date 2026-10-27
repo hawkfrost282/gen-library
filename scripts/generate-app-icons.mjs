@@ -119,7 +119,8 @@ async function writeIcns() {
   );
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    throw new Error(`iconutil failed with exit code ${String(result.status)}`);
+    console.warn('[icons] iconutil unavailable; using standard PNG-based ICNS entries');
+    await writePortableIcns();
   }
 
   await rm(iconsetDir, { recursive: true, force: true });

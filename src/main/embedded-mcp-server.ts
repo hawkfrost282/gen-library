@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { assertInputBudget } from '../shared/input-budget';
 import { createServer, type IncomingMessage, type ServerResponse, type Server as HttpServer } from 'node:http';
 
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -202,7 +203,9 @@ function readBody(request: IncomingMessage): Promise<unknown> {
         return;
       }
       try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+        const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        assertInputBudget(parsed);
+        resolve(parsed);
       } catch {
         reject(new EmbeddedMcpServerError('MCP_SERVER_INVALID_REQUEST', 'The MCP request body is not valid JSON.'));
       }

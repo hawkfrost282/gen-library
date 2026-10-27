@@ -1,3 +1,5 @@
+> This is the upstream Serpent documentation. For this fork, start with the [Gen Library README](README.md).
+
 <div align="center">
 
 **🇺🇸 English** | [🇨🇳 简体中文](README.md)

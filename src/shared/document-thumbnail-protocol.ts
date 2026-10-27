@@ -12,8 +12,8 @@
  * PNG bytes return to the Worker, which alone persists the artifact row.
  *
  * Security: the offscreen window loads the HTML like a browser opening a local
- * file (sandboxed renderer, no preload, no Node integration). Page JS executes,
- * but only inside the sandbox; Main does not grant any extra capability.
+ * file (sandboxed renderer, no preload, no Node integration). Document scripts
+ * and external resources are blocked.
  */
 
 import { z } from 'zod';

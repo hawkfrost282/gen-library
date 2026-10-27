@@ -16,7 +16,7 @@ import { createPackage } from '@electron/asar';
 import { afterEach, describe, expect, it } from 'vitest';
 // The media helper is an untyped ESM script; the test only needs the platform gate.
 // @ts-expect-error media-binaries-lib.mjs has no declaration file.
-import { SUPPORTED_PLATFORMS, currentPlatformKey } from '../../scripts/media-binaries-lib.mjs';
+import { SUPPORTED_PLATFORMS, currentPlatformKey, assertMatchingMediaSources } from '../../scripts/media-binaries-lib.mjs';
 import forgeConfig from '../../forge.config';
 import {
   assertWindowsSystemDependencies,
@@ -203,7 +203,7 @@ describe.skipIf(process.platform === 'win32')('media binary release gate', () =>
       roots.push(packageRoot);
       const packagedResources = path.join(
         packageRoot,
-        'Serpent.app',
+        'Gen Library.app',
         'Contents',
         'Resources',
       );
@@ -245,7 +245,7 @@ describe.skipIf(process.platform === 'win32')('media binary release gate', () =>
       cpSync(root, path.join(packagedResources, 'resources'), { recursive: true });
       // verify-package requires a sealed (ad-hoc signed) macOS bundle, so
       // give the fixture a minimal executable + Info.plist and sign it.
-      const appBundle = path.join(packageRoot, 'Serpent.app');
+      const appBundle = path.join(packageRoot, 'Gen Library.app');
       writeFixtureFile(
         path.join(appBundle, 'Contents', 'Info.plist'),
         '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>CFBundleExecutable</key><string>Serpent</string><key>CFBundleIdentifier</key><string>dev.serpent.package-test</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>\n',
@@ -497,4 +497,16 @@ it('bootstraps a pinned host pkgconf instead of depending on Homebrew', () => {
   expect(macScript).toContain('install pkgconf:arm64-osx');
   expect(macScript).toContain('export PKG_CONFIG="$HOST_TOOLS_ROOT/arm64-osx/tools/pkgconf/pkgconf"');
   expect(macScript).not.toMatch(/\bbrew\b/);
+});
+
+
+describe('platform-specific media trust', () => {
+  it('accepts unrelated platform updates while rejecting changes to the platform being built', () => {
+    const shared = { schemaVersion: 1, registry: { commit: 'pinned' }, vcpkgTool: {}, components: { ffmpeg: { sha256: 'windows' }, oiio: { sha256: 'oiio' } } };
+    const old = { ...shared, platforms: { 'darwin-arm64': { components: { ffmpeg: { sha256: 'mac' } } } } };
+    const updated = { ...old, components: { ...shared.components, ffmpeg: { sha256: 'new-windows' } } };
+    expect(() => assertMatchingMediaSources(old, updated, 'darwin-arm64')).not.toThrow();
+    expect(() => assertMatchingMediaSources(old, updated, 'win32-x64')).toThrow();
+    expect(() => assertMatchingMediaSources(old, { ...old, registry: { commit: 'different' } }, 'darwin-arm64')).toThrow();
+  });
 });

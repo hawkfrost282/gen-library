@@ -91,3 +91,16 @@ describe('artifact protocol byte ranges', () => {
     expect(streamErrors).toEqual([]);
   });
 });
+
+describe('HTML artifact isolation', () => {
+  it('blocks scripts, remote resources, frames and form submissions', async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'gen-library-html-')); roots.push(root);
+    const file = path.join(root, 'sample.html'); writeFileSync(file, '<script>fetch("https://example.com")</script>');
+    const response = await createArtifactResponse(file, 'text/html; charset=utf-8');
+    const policy = response.headers.get('content-security-policy');
+    expect(policy).toContain("script-src 'none'"); expect(policy).toContain("connect-src 'none'");
+    expect(policy).toContain("form-action 'none'"); expect(policy).not.toContain('https:');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    await response.text();
+  });
+});

@@ -1,3 +1,5 @@
+import { GenerationDetails } from './GenerationDetails';
+import type { GenerationMetadata } from '../shared/generation-metadata';
 import {
   useState,
   useMemo,
@@ -738,6 +740,7 @@ export function InspectorPanel(props: InspectorPanelProps) {
   const [activeTagSuggestionIndex, setActiveTagSuggestionIndex] = useState(-1);
   const tagInputRef = useRef<HTMLInputElement>(null);
   const tagInputComposingRef = useRef(false);
+  const [generationCache, setGenerationCache] = useState<{ assetId: string; metadata: GenerationMetadata | null } | null>(null);
   const [videoTechCache, setVideoTechCache] = useState<{
     assetId: string;
     metadata: ExtractedVideoMetadata;
@@ -769,7 +772,7 @@ export function InspectorPanel(props: InspectorPanelProps) {
         api &&
           libraryId &&
           assetId &&
-          (isVideo || isAudio || isGif || isEmbeddedImage || isFont) &&
+          (isVideo || isAudio || isGif || isEmbeddedImage || selectedAsset?.mediaType === "image" || isFont) &&
           selectionCount < 2,
       );
 
@@ -786,7 +789,11 @@ export function InspectorPanel(props: InspectorPanelProps) {
       try {
         const result = await api.getExtractedMetadata({ libraryId, assetId });
         if (cancelled) return;
-        if (!result.ok) return;
+        if (!result.ok) {
+          setGenerationCache({ assetId, metadata: null });
+          return;
+        }
+        setGenerationCache({ assetId, metadata: result.value.generation ?? null });
         if (result.value.status === "ready" && result.value.metadata) {
           setVideoTechCache({
             assetId,
@@ -809,6 +816,7 @@ export function InspectorPanel(props: InspectorPanelProps) {
         }
       } catch {
         // Best-effort; Inspector stays without the tech line.
+        if (!cancelled) setGenerationCache({ assetId, metadata: null });
       }
     };
 
@@ -1720,6 +1728,14 @@ export function InspectorPanel(props: InspectorPanelProps) {
             </>
           ) : (
             <div className="inspector-metadata-placeholder" aria-hidden="true" />
+          )}
+
+          {selectedAsset?.mediaType === "image" && selectionCount < 2 && (
+            <GenerationDetails
+              key={selectedAsset.assetId}
+              metadata={generationCache?.assetId === selectedAsset.assetId ? generationCache.metadata : null}
+              loading={generationCache?.assetId !== selectedAsset.assetId}
+            />
           )}
 
           {aiAnalyzing && (

@@ -131,6 +131,11 @@ export async function createArtifactResponse(
         'Accept-Ranges': 'bytes',
         'Cache-Control': 'public, max-age=31536000, immutable',
         'Content-Type': mimeType,
+        'X-Content-Type-Options': 'nosniff',
+        ...(mimeType.toLowerCase().startsWith('text/html') ? {
+          // Asset previews are documents, never application code. Also blocks remote pixels/fonts.
+          'Content-Security-Policy': "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src serpent: data: blob:; font-src serpent: data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'",
+        } : {}),
       };
 
       if (!rangeHeader) {

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { EMBEDDING_DOWNLOAD_INTEGRITY } from "./embedding-integrity";
 import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, renameSync, createWriteStream, unlinkSync, rmSync, chmodSync } from "node:fs";
 import { promisify } from "node:util";
@@ -171,6 +173,8 @@ async function downloadEmbeddingFileOnce(
     stallTimeoutMs?: number;
   },
 ): Promise<void> {
+  const expected = verifiedEmbeddingDownload(url);
+  const hash = createHash('sha256');
   const stallTimeoutMs = options?.stallTimeoutMs ?? 45_000;
   const response = await fetch(url, { redirect: "follow", signal: options?.signal });
   if (!response.ok || !response.body) {
@@ -211,6 +215,10 @@ async function downloadEmbeddingFileOnce(
       if (done) break;
       if (!value || value.byteLength === 0) continue;
       const buffer = Buffer.from(value);
+      if (bytesDownloaded + buffer.byteLength > expected.bytes) {
+        throw new EmbeddingInstallError('failed', 'Downloaded file exceeds its verified size.');
+      }
+      hash.update(buffer);
       await new Promise<void>((resolve, reject) => {
         output.write(buffer, (error) => (error ? reject(error) : resolve()));
       });
@@ -224,6 +232,9 @@ async function downloadEmbeddingFileOnce(
     await new Promise<void>((resolve, reject) => {
       output.end((error: Error | null | undefined) => (error ? reject(error) : resolve()));
     });
+    if (bytesDownloaded !== expected.bytes || hash.digest('hex') !== expected.sha256) {
+      throw new EmbeddingInstallError('failed', 'Download integrity check failed. The file was not installed.');
+    }
     renameSync(temporary, destination);
   } catch (error) {
     try {
@@ -389,25 +400,21 @@ export type EmbeddingDownloadProgress = {
   readonly phase: "downloading-model" | "downloading-runtime" | "extracting";
 };
 
-const GITHUB_DOWNLOAD_MIRRORS: ReadonlyArray<(url: string) => string> = [
-  (url) => url,
-  (url) => `https://ghproxy.net/${url}`,
-  (url) => `https://mirror.ghproxy.com/${url}`,
-];
+export function verifiedEmbeddingDownload(url: string): { sha256: string; bytes: number } {
+  const fileName = new URL(url).pathname.split('/').pop() ?? '';
+  const expected = EMBEDDING_DOWNLOAD_INTEGRITY[fileName];
+  const official = MODEL_FILE_NAMES.includes(fileName as typeof MODEL_FILE_NAMES[number])
+    ? embeddingDownloadUrl(fileName)
+    : pinnedLlamaRuntimeUrl(fileName);
+  if (!expected || url !== official) {
+    throw new EmbeddingInstallError('failed', 'No trusted checksum exists for this download.');
+  }
+  return expected;
+}
 
 function candidateDownloadUrls(url: string): string[] {
-  if (!url.includes("://github.com/") && !url.includes("://objects.githubusercontent.com/")) {
-    return [url];
-  }
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const mirror of GITHUB_DOWNLOAD_MIRRORS) {
-    const next = mirror(url);
-    if (seen.has(next)) continue;
-    seen.add(next);
-    out.push(next);
-  }
-  return out;
+  verifiedEmbeddingDownload(url);
+  return [url];
 }
 
 async function sleep(ms: number): Promise<void> {

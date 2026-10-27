@@ -53,3 +53,7 @@ AGENTS.md
 CLAUDE.md
 .beads/
 .github/
+
+# Local builds, scratch libraries, native headers and preview profiles
+.cache/
+.local/

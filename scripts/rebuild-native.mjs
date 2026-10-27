@@ -20,6 +20,8 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { rebuildNativeWithSpaces } from './rebuild-native-with-spaces.mjs';
+
 import { killStaleSerpentDevProcesses } from './kill-stale-dev.mjs';
 
 process.env.VcpkgEnabled = 'false';
@@ -68,9 +70,17 @@ if (existsSync(buildDir)) {
 }
 
 console.log('[rebuild-native] Rebuilding better-sqlite3 for Electron (VcpkgEnabled=false)...');
-await run(process.execPath, [rebuildCli, '-f', '-w', 'better-sqlite3'], {
-  env: { VcpkgEnabled: 'false' },
-});
+if (process.platform === 'darwin' && repoRoot.includes(' ')) {
+  await rebuildNativeWithSpaces({
+    moduleRoot: betterSqlite3Root,
+    headers: path.join(repoRoot, '.cache', 'electron-headers'),
+    electronVersion: require('electron/package.json').version,
+  });
+} else {
+  await run(process.execPath, [rebuildCli, '-f', '-w', 'better-sqlite3'], {
+    env: { VcpkgEnabled: 'false' },
+  });
+}
 
 // A legitimate static build never contains a sqlite3.dll. Its presence means
 // a vcpkg applocal deployment (or similar) slipped through and the .node
@@ -116,4 +126,7 @@ try {
   rmSync(probePath, { force: true });
 }
 
+// Match Electron Forge's cache marker only after the runtime/FTS5 probe succeeds.
+const abi = require('node-abi').getAbi(require('electron/package.json').version, 'electron');
+writeFileSync(path.join(buildDir, 'Release', '.forge-meta'), `${process.arch}--${abi}`);
 console.log('[rebuild-native] better-sqlite3 rebuilt and FTS5 verified for Electron.');

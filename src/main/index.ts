@@ -1,4 +1,5 @@
 import path from "node:path";
+import { APP_ID, APP_NAME, ENABLE_BROWSER_CONNECTOR, ENABLE_UPSTREAM_UPDATES } from '../shared/brand';
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -547,6 +548,9 @@ import {
   rewritePluginUiHtmlAssetUrls,
   pluginUiMimeType,
 } from "./plugin-ui-assets";
+
+// Give this fork its own preferences and library history before taking the instance lock.
+app.setName(APP_NAME);
 
 // Headless E2E hosts may expose no hardware WebGL implementation. Opt those
 // tests into Chromium's explicitly acknowledged software path; production
@@ -4332,7 +4336,8 @@ function criticalRendererRequest(request: RendererRequest): boolean {
     || request.type === 'asset.delete-from-disk.request'
     || request.type === 'asset.delete-permanent.request'
     || request.type === 'trash.purge.request'
-    || (request.type === 'linked-folder.delete-subtree.request' && request.deleteFromDisk);
+    || (request.type === 'linked-folder.delete-subtree.request' && request.deleteFromDisk)
+    || (request.type === 'asset.delete-linked.request' && request.deleteSourceFile);
 }
 
 type CriticalRendererOperation =
@@ -4362,6 +4367,8 @@ function criticalRendererOperation(request: RendererRequest): CriticalRendererOp
       return 'trash-purge';
     case 'asset.delete-from-disk.request':
       return request.locationKind === 'linked' ? 'linked-asset' : 'asset';
+    case 'asset.delete-linked.request':
+      return 'linked-asset';
     default:
       return 'asset';
   }
@@ -4385,23 +4392,23 @@ function criticalRendererCopy(
       };
     case 'linked-folder':
       return {
-        heading: english ? 'Delete linked-folder files from disk?' : '从磁盘删除链接文件夹内容？',
+        heading: english ? 'Move linked-folder files to Trash?' : '将链接文件夹内容移到系统回收站？',
         message: english
-          ? 'The selected linked-folder source files will be permanently deleted.'
-          : '选定链接文件夹中的源文件将被永久删除。',
+          ? 'The selected linked-folder source files will be moved to the system Trash.'
+          : '选定链接文件夹中的源文件将被移到系统回收站。',
         detail: english
-          ? 'This cannot be undone and the files will not go to the application trash.'
-          : '此操作无法撤销，文件不会进入应用回收站。',
+          ? 'Recover original files using the operating system’s Trash. Reimport them to restore their library records.'
+          : '可以从系统回收站恢复原始文件，然后重新导入资源库。',
       };
     case 'linked-asset':
       return {
-        heading: english ? 'Delete these linked assets from disk?' : '从磁盘删除这些链接资产的源文件？',
+        heading: english ? 'Move these linked originals to Trash?' : '从磁盘删除这些链接资产的源文件？',
         message: english
-          ? `The source files of ${count} selected linked asset(s) will be permanently deleted, and their library link records with them.`
-          : `选定 ${count} 个链接资产的源文件将被永久删除，库内的链接记录也会一并移除。`,
+          ? `The source files of ${count} selected linked asset(s) will be moved to the system Trash, and their library records removed.`
+          : `选定 ${count} 个链接资产的源文件将被移到系统回收站，库内的链接记录也会一并移除。`,
         detail: english
-          ? 'This cannot be undone; the source files are deleted from the linked folder and do not go to the recycle bin.'
-          : '此操作无法撤销：链接文件夹中的源文件会被直接删除，不会进入系统回收站。',
+          ? 'You can recover the original files from your operating system’s Trash. Their library records will need to be restored by importing again.'
+          : '可以从系统回收站恢复原始文件，然后重新导入资源库。',
       };
     case 'asset-permanent':
       return {
@@ -4707,7 +4714,7 @@ async function startApplication(): Promise<void> {
   // menu's first item shows "Serpent" from the very first frame.
   if (process.platform === "darwin") {
     app.setAboutPanelOptions({
-      applicationName: "Serpent",
+      applicationName: APP_NAME,
       applicationVersion: app.getVersion(),
     });
   }
@@ -4715,7 +4722,7 @@ async function startApplication(): Promise<void> {
   // the shortcuts created by the installer (WiX/Squirrel both set one). Without
   // this, the taskbar shows the default Electron icon and pinning breaks.
   if (process.platform === "win32") {
-    app.setAppUserModelId("com.serpent.app");
+    app.setAppUserModelId(APP_ID);
   }
   // Isolated E2E runs must not write the log into the real user profile
   // (~/Library/Logs/Serpent); pin it under the temp userData instead.
@@ -4728,7 +4735,7 @@ async function startApplication(): Promise<void> {
   logger = new AppLogger(appLogPath);
   bindRendererKeyboardFocusLogger(logger);
   void sweepOrphanExternalLibraryStagingOnStartup();
-  appUpdateService = createAppUpdateService({
+  appUpdateService = ENABLE_UPSTREAM_UPDATES ? createAppUpdateService({
     currentVersion: app.getVersion(),
     isPackaged: app.isPackaged,
     platform: process.platform,
@@ -4784,7 +4791,7 @@ async function startApplication(): Promise<void> {
       mainWindow?.webContents.send(APP_UPDATE_PROGRESS_CHANNEL, progress);
     },
     logger,
-  });
+  }) : undefined;
   // Serpent-wgmy: 会话日志最多保留最近 100 份，启动时清理最旧；
   // 清理失败不得阻断启动。
   try {
@@ -7313,8 +7320,8 @@ async function startApplication(): Promise<void> {
     "extension-recent-browse-folders.json",
   );
 
-  // Start the browser-extension HTTP server on 127.0.0.1.
-  try {
+  // The legacy, unpaired browser connector is disabled in personal builds.
+  if (ENABLE_BROWSER_CONNECTOR) try {
     extensionServer = await createExtensionServer({
       port: 19876,
       uploadStagingRoot: app.getPath("temp"),
@@ -7341,7 +7348,7 @@ async function startApplication(): Promise<void> {
 // Serpent-tluf: must run before app ready — the macOS application menu's
 // first item always displays the application name, and a ready-late
 // setName is too late for it (dev otherwise shows "Electron").
-app.setName("Serpent");
+app.setName(APP_NAME);
 
 if (!hasSingleInstanceLock) {
   app.quit();
@@ -7358,7 +7365,7 @@ if (!hasSingleInstanceLock) {
     .catch((error: unknown) => {
       logger?.error("main.startup", error);
       dialog.showErrorBox(
-        "Serpent could not start",
+        `${APP_NAME} could not start`,
         toPublicError(error).message,
       );
       app.quit();

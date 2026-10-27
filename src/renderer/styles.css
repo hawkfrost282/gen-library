@@ -19750,3 +19750,14 @@ body.platform-darwin .app-shell[data-shell-layout="islands"] .toolbar-nav-cluste
   background: var(--danger-muted);
   color: var(--danger);
 }
+
+/* Gen Library: complete generation records remain readable and copyable. */
+.generation-details { padding: 14px; margin: 12px 0; border: 1px solid var(--divider); border-radius: calc(12px * var(--ui-radius-scale, 1)); }
+.generation-details summary { cursor: pointer; font-weight: 600; }
+.generation-details dl { margin: 12px 0; }
+.generation-details dl > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; margin: 7px 0; }
+.generation-details dt, .generation-note { opacity: .72; font-size: 12px; }
+.generation-details dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.generation-field-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.generation-details button { padding: 4px 9px; border: 1px solid var(--divider); border-radius: calc(6px * var(--ui-radius-scale, 1)); background: transparent; color: inherit; cursor: pointer; }
+.generation-details pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; font: inherit; font-size: 12px; line-height: 1.55; user-select: text; }

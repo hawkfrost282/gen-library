@@ -53,7 +53,7 @@ export function HtmlViewerSurface({
         className="html-viewer-iframe"
         ref={iframeRef}
         src={sourceUrl}
-        sandbox="allow-scripts allow-same-origin"
+        sandbox="allow-same-origin"
         onLoad={handleLoad}
         onError={handleError}
         title={t("viewer.htmlPreview")}

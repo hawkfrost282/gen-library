@@ -17,9 +17,11 @@ const asar = require('@electron/asar');
 // file:///E:/repo/scripts/verify-package.mjs → E:\repo\scripts\verify-package.mjs
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+const productName = JSON.parse(readFileSync(path.join(projectRoot, 'package.json'), 'utf8')).productName;
+
 const targetPlatform = process.env.SERPENT_PACKAGE_PLATFORM
-  ?? path.basename(process.env.SERPENT_PACKAGE_ROOT ?? path.resolve('out', `Serpent-${process.platform}-${process.arch}`))
-    .replace(/^Serpent-/u, '');
+  ?? path.basename(process.env.SERPENT_PACKAGE_ROOT ?? path.resolve('out', `${productName}-${process.platform}-${process.arch}`))
+    .replace(`${productName}-`, '');
 const targetSeparator = targetPlatform.lastIndexOf('-');
 const packagePlatform = targetPlatform.slice(0, targetSeparator);
 const packageArch = targetPlatform.slice(targetSeparator + 1);
@@ -29,11 +31,11 @@ if (targetSeparator <= 0 || !packageArch) {
 if (packagePlatform !== process.platform || packageArch !== process.arch) {
   throw new Error(`Package verification requires a matching host; target is ${packagePlatform}-${packageArch}, host is ${process.platform}-${process.arch}.`);
 }
-const platformDirectory = `Serpent-${packagePlatform}-${packageArch}`;
+const platformDirectory = `${productName}-${packagePlatform}-${packageArch}`;
 const packageRoot = process.env.SERPENT_PACKAGE_ROOT ?? path.resolve('out', platformDirectory);
 const resourcesPath =
   packagePlatform === 'darwin'
-    ? path.join(packageRoot, 'Serpent.app', 'Contents', 'Resources')
+    ? path.join(packageRoot, `${productName}.app`, 'Contents', 'Resources')
     : path.join(packageRoot, 'resources');
 
 const requiredPaths = [
@@ -62,8 +64,9 @@ if (sqliteVecPackage) {
     `vec0.${sqliteVecExtension}`));
 }
 
-// 2026-09-15：链接资产/文件夹的删除改为永久删除源文件，产品不再使用系统回收站，
-// 因此不再校验 `trash` 的本地 helper 是否随包解包。
+if (packagePlatform === 'darwin') {
+  requiredPaths.push(path.join(resourcesPath, 'app.asar.unpacked', 'node_modules', 'trash', 'lib', 'macos-trash'));
+}
 const missingPaths = requiredPaths.filter((requiredPath) => !existsSync(requiredPath));
 if (missingPaths.length > 0) {
   throw new Error(`Package is missing required runtime files:\n${missingPaths.join('\n')}`);
@@ -150,9 +153,8 @@ const apiVersion = Number(apiVersionMatch[1]);
 const declarationPath = path.join(
   projectRoot,
   'docs',
-  'internal',
-  'skills',
-  'serpent-automation',
+  'manual',
+  'scripts',
   'automation-api.d.ts',
 );
 if (!existsSync(declarationPath)) {
@@ -213,7 +215,7 @@ if (process.env.SERPENT_MEDIA_SKIP_PROVENANCE === '1') {
 }
 
 if (packagePlatform === 'darwin') {
-  const appPath = path.join(packageRoot, 'Serpent.app');
+  const appPath = path.join(packageRoot, `${productName}.app`);
   const codeResources = path.join(appPath, 'Contents', '_CodeSignature', 'CodeResources');
   if (!existsSync(codeResources)) {
     throw new Error(

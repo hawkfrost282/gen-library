@@ -1,6 +1,7 @@
 import type { WorkerRequest } from '../../shared/protocol/requests';
 import type { WorkerResult } from '../../shared/protocol/responses';
 import { searchRequestLaneKey } from '../search-request-coordinator';
+import { readGenerationMetadata } from '../generation-metadata-reader';
 import type { LibraryService } from '../library-service';
 
 export type AssetQueryHooks = {
@@ -20,7 +21,13 @@ export async function executeAssetQueryWorkerCommand(
     }
     case 'asset.extracted-metadata.get': {
       const result = libraryService.getExtractedMetadata(request.command);
-      return { ok: true, type: 'asset.extracted-metadata.got', result };
+      // Missing linked sources must retain the existing metadata status instead of failing the inspector.
+      let generation = null;
+      try {
+        const source = libraryService.resolveAssetFilePath(request.command.libraryId, request.command.assetId);
+        generation = await readGenerationMetadata(source.filePath);
+      } catch { /* Source is offline or missing. */ }
+      return { ok: true, type: 'asset.extracted-metadata.got', result: { ...result, generation } };
     }
     case 'asset.color-space.set': {
       const result = libraryService.setAssetColorSpaceOverride(request.command);

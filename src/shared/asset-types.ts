@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { generationMetadataSchema } from './generation-metadata';
 
 import { entityAppearanceSchema } from './entity-appearance';
 
@@ -472,6 +473,7 @@ export type ExtractedVideoMetadata = z.infer<typeof extractedVideoMetadataSchema
 
 export const extractedMetadataResultSchema = z.strictObject({
   assetId: nonBlankString,
+  generation: generationMetadataSchema.nullable().optional(),
   status: z.enum(['ready', 'pending', 'failed', 'missing']),
   metadata: extractedVideoMetadataSchema.nullable(),
   /** Header-only image dimensions are useful for layout, but not Inspector-complete. */

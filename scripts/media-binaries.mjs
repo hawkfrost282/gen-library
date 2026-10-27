@@ -7,13 +7,13 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import AdmZip from 'adm-zip';
 
 import {
   assertPlatform,
+  assertMatchingMediaSources,
   currentPlatformKey,
   generateManifest,
   readJson,
@@ -118,21 +118,17 @@ async function acquire({ platform, root, lockPath }) {
     throw new Error(`Media bundle ${platform} archive SHA-256 mismatch.`);
   }
 
-  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'serpent-media-'));
+  const staging = path.join(root, 'media-binaries', '.staging');
+  mkdirSync(staging, { recursive: true });
+  const temporaryRoot = mkdtempSync(path.join(staging, 'acquire-'));
   try {
     extractZipSafely(archiveBuffer, temporaryRoot);
     verifyBundle({ root: temporaryRoot, platform });
-    const localSourceLock = JSON.stringify(
+    assertMatchingMediaSources(
       readJson(path.join(root, 'media-binaries', 'source-lock.json')),
-    );
-    const archiveSourceLock = JSON.stringify(
       readJson(path.join(temporaryRoot, 'media-binaries', 'source-lock.json')),
+      platform,
     );
-    if (archiveSourceLock !== localSourceLock) {
-      throw new Error(
-        'Media bundle source-lock.json does not match this checkout; update trust metadata separately.',
-      );
-    }
     const archiveManifestPath = path.join(
       temporaryRoot,
       'media-binaries',

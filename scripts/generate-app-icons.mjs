@@ -42,34 +42,40 @@ const portableIcnsEntries = [
   ['ic10', 1024],
 ];
 
+let normalizedIcon;
+
+async function normalizedAppIcon() {
+  if (normalizedIcon) return normalizedIcon;
+  const { data, info } = await sharp(iconSources.app).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  let left = info.width; let top = info.height; let right = -1; let bottom = -1;
+  for (let y = 0; y < info.height; y++) {
+    for (let x = 0; x < info.width; x++) {
+      if (data[(y * info.width + x) * info.channels + info.channels - 1] <= 8) continue;
+      left = Math.min(left, x); top = Math.min(top, y);
+      right = Math.max(right, x); bottom = Math.max(bottom, y);
+    }
+  }
+  if (right < left || bottom < top) throw new Error('App icon has no visible artwork.');
+  // One canonical canvas for ICNS, Dock and PNG. Trim only empty alpha padding,
+  // then fit the tile inside the standard safe area without stretching/cropping it.
+  normalizedIcon = await sharp(iconSources.app)
+    .extract({ left, top, width: right - left + 1, height: bottom - top + 1 })
+    .resize(896, 896, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .extend({ top: 64, bottom: 64, left: 64, right: 64, background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png({ compressionLevel: 9 }).toBuffer();
+  return normalizedIcon;
+}
+
 async function resizePng(size) {
-  return sharp(iconSources.app)
-    .resize(size, size, { fit: 'cover' })
-    .png()
-    .toBuffer();
+  return sharp(await normalizedAppIcon()).resize(size, size).png().toBuffer();
 }
 
 async function writeMasterPng() {
-  await sharp(iconSources.app)
-    .resize(1024, 1024, { fit: 'cover' })
-    .png()
-    .toFile(generatedAppIcons.png);
+  await writeFile(generatedAppIcons.png, await normalizedAppIcon());
 }
 
 async function writeDockPng() {
-  const safeSize = 896;
-  const margin = (1024 - safeSize) / 2;
-  await sharp(iconSources.app)
-    .resize(safeSize, safeSize, { fit: 'cover' })
-    .extend({
-      top: margin,
-      bottom: margin,
-      left: margin,
-      right: margin,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    })
-    .png()
-    .toFile(generatedAppIcons.dockPng);
+  await writeFile(generatedAppIcons.dockPng, await normalizedAppIcon());
 }
 
 async function writeIco() {
@@ -105,10 +111,7 @@ async function writeIcns() {
 
   await Promise.all(
     iconsetEntries.map(async ([filename, size]) => {
-      await sharp(iconSources.app)
-        .resize(size, size, { fit: 'cover' })
-        .png()
-        .toFile(path.join(iconsetDir, filename));
+      await writeFile(path.join(iconsetDir, filename), await resizePng(size));
     }),
   );
 

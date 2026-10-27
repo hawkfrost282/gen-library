@@ -2,7 +2,7 @@
 
 Gen Library is a personal image-library fork of [Serpent](https://github.com/dolag233/Serpent), based on version 0.3.3 (`dbf4c27`). It keeps Serpent's readable `Assets` folders, tagging, ratings, collections, and Finder access, with changes focused on generated-image metadata and safer file handling.
 
-This is an early macOS development preview, not a finished release. The name and chosen ghost-in-a-library icon are provisional. Original MIT copyright and third-party notices are preserved.
+This is an early macOS development preview, not a finished release. The name and simplified ghost-and-books icon are provisional. Original MIT copyright and third-party notices are preserved.
 
 ## What this preview adds
 

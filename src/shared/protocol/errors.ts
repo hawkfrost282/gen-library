@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const PUBLIC_ERROR_MESSAGES = {
   CANCELLED: 'The request was cancelled.',
+  NSFW_ROUTING_ACTIVE: 'Sync and AI analysis are paused while NSFW vault routing is enabled. Finish moving private images before turning routing off.',
   PRIVATE_WORKSPACE_RESTRICTED: 'This feature is disabled in a private workspace. Cloud AI, sync, plugins, linked sources and external sharing are unavailable.',
   INTERNAL_ERROR:
     'Serpent hit an unexpected error and could not finish. Open Diagnostics in the app to inspect this session’s log, then retry. If you were opening a library, copy the whole library folder onto a local disk and open it from there.',

@@ -19779,3 +19779,13 @@ body.platform-darwin .app-shell[data-shell-layout="islands"] .toolbar-nav-cluste
 .vault-capacity-settings summary { cursor: pointer; font-weight: 600; }
 .vault-capacity-settings label { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
 .vault-capacity-settings input { width: 110px; padding: 8px; border: 1px solid var(--divider); border-radius: calc(6px * var(--ui-radius-scale, 1)); color: var(--text); background: var(--pane); }
+
+.vault-routing { border-block: 1px solid var(--divider); padding: 18px 0; margin: 18px 0; }
+.vault-routing-check { display: flex; gap: 9px; align-items: start; margin: 14px 0; line-height: 1.5; }
+.vault-routing-check input { flex: none; margin-top: 4px; }
+.vault-routing-pending { border: 1px solid var(--divider); border-radius: calc(8px * var(--ui-radius-scale, 1)); padding: 14px; margin-top: 14px; }
+.vault-routing select { padding: 8px; color: var(--text); background: var(--pane); border: 1px solid var(--divider); border-radius: calc(6px * var(--ui-radius-scale, 1)); }
+
+.vault-routing > summary { cursor: pointer; font-weight: 600; }
+.vault-routing-notes { margin-top: 16px; }
+.vault-routing-notes summary { cursor: pointer; }

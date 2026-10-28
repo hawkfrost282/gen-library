@@ -1,5 +1,8 @@
+import { createHash } from 'node:crypto';
+import { atomicVaultJson, vaultDirectory, vaultFileHash, syncVaultFile } from './vault-transfer-io';
+import { vaultReceiptSchema, type VaultSource, type VaultReceipt } from '../shared/vault-routing';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmdirSync, realpathSync, lstatSync, chmodSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmdirSync, realpathSync, lstatSync, chmodSync, copyFileSync, rmSync, constants } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -38,7 +41,7 @@ export async function diskImageInfo(args: string[]): Promise<Record<string, unkn
   return JSON.parse(json) as Record<string, unknown>;
 }
 const storedSession = z.object({ id: z.string().uuid(), name: z.string().max(80), image: z.string(), mount: z.string() });
-type Session = z.infer<typeof storedSession> & { child: ChildProcess | null; error?: string; locking?: Promise<void>; recovered?: boolean };
+type Session = z.infer<typeof storedSession> & { child: ChildProcess | null; error?: string; locking?: Promise<void>; recovered?: boolean; transferring?: Promise<VaultReceipt> };
 export type VaultManagerOptions = {
   userData: string; mountRoot?: string; executable: string; appPath: string; packaged: boolean;
   runDisk?: typeof runDiskImage; info?: typeof diskImageInfo;
@@ -64,7 +67,7 @@ export class VaultManager {
   get active(): boolean { return this.sessions.size > 0; }
   snapshot(): VaultStatus {
     return { supported: process.platform === 'darwin', privateWorkspace: false, privateLibraryPath: null,
-      sessions: [...this.sessions.values()].map(({ id, name, child, error }) => ({ id, name, running: child !== null, ...(error ? { error } : {}) })) };
+      sessions: [...this.sessions.values()].map(({ id, name, image, child, error }) => ({ id, name, image, running: child !== null, ...(error ? { error } : {}) })) };
   }
   private persist(): void {
     const records = [...this.sessions.values()].map(({ id, name, image, mount }) => ({ id, name, image, mount }));
@@ -161,6 +164,40 @@ export class VaultManager {
       throw error;
     }
   }
+  async transfer(image: string, source: VaultSource, folder: string): Promise<VaultReceipt> {
+    image = realpathSync(image);
+    const session = [...this.sessions.values()].find((item) => item.image === image);
+    if (!session?.child || session.locking || session.error) throw new Error('Unlock the selected vault before moving this image.');
+    if (session.transferring) throw new Error('Another vault transfer is still running.');
+    const work = this.transferIntoSession(session, source, folder); session.transferring = work;
+    try { return await work; } finally { session.transferring = undefined; }
+  }
+  private async transferIntoSession(session: Session, source: VaultSource, folder: string): Promise<VaultReceipt> {
+    const digest = createHash('sha256').update(JSON.stringify({ libraryId: source.libraryId, assetId: source.assetId, revisionId: source.revisionId, sha256: source.sha256, metadataHash: source.metadataHash, folder })).digest('hex');
+    const transferId = `${digest.slice(0,8)}-${digest.slice(8,12)}-4${digest.slice(13,16)}-8${digest.slice(17,20)}-${digest.slice(20,32)}`;
+    const verificationNonce = randomUUID();
+    const receipts = vaultDirectory(session.mount, '.vault-transfers', 'receipts');
+    const receiptPath = path.join(receipts, `${transferId}.json`);
+    const readReceipt = () => {
+      const receipt = vaultReceiptSchema.parse(JSON.parse(readFileSync(receiptPath, 'utf8')));
+      if (receipt.transferId !== transferId || receipt.sha256 !== source.sha256 || receipt.metadataHash !== source.metadataHash) throw new Error('The vault receipt does not match this image.'); return receipt;
+    };
+    const batch = vaultDirectory(session.mount, '.vault-transfers', 'pending', transferId);
+    const manifest = path.join(batch, 'manifest.json');
+    if (!existsSync(manifest)) {
+      const staged = path.join(vaultDirectory(batch, 'files'), source.fileName); if (existsSync(staged)) rmSync(staged);
+      copyFileSync(source.sourcePath, staged, constants.COPYFILE_EXCL); syncVaultFile(staged);
+      if (vaultFileHash(staged) !== source.sha256) throw new Error('The source image changed during the copy. Its original has been kept.');
+    }
+    atomicVaultJson(manifest, { transferId, verificationNonce, source, folder });
+    const deadline = Date.now() + 90_000;
+    while (Date.now() < deadline) {
+      if (existsSync(receiptPath)) { const receipt = readReceipt(); if (receipt.verificationNonce === verificationNonce) return receipt; }
+      if (!session.child || existsSync(path.join(batch, 'error.json'))) throw new Error('The private import did not finish. The original has been kept.');
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    throw new Error('Private import verification is taking longer than expected. The original has been kept.');
+  }
   private removeMountDirectory(mount: string): void {
     try { rmdirSync(mount); } catch { /* hdiutil may already have removed the empty mount point. */ }
     try { rmdirSync(path.dirname(mount)); } catch { /* Preserve anything unexpected. */ }
@@ -170,6 +207,7 @@ export class VaultManager {
     if (session.locking) return session.locking;
     session.locking = Promise.resolve().then(async () => {
       try {
+        await session.transferring?.catch(() => {});
         const child = session.child;
         if (child && child.exitCode === null && child.signalCode === null) {
           await new Promise<void>((resolve, reject) => {

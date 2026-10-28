@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react';
-import type { VaultApi, VaultStatus } from '../shared/vault';
+import { useEffect, useRef, useState } from 'react';
+import type { VaultApi, VaultStatus, VaultRequest } from '../shared/vault';
+import { VaultRoutingSettings } from './VaultRoutingSettings';
 import { DialogShell } from './ui/patterns';
 export function VaultEntry({ api, compact = false, onVisibilityChange }: { api: VaultApi | undefined; compact?: boolean; onVisibilityChange?(open: boolean): void }) {
   const [open, setOpen] = useState(false); const [status, setStatus] = useState<VaultStatus | null>(null);
   const [name, setName] = useState('Private Library'); const [password, setPassword] = useState('');
   const [repeat, setRepeat] = useState(''); const [size, setSize] = useState(50);
+  const prompted = useRef<string | undefined>(undefined);
+  useEffect(() => { const id = status?.routing?.pending[0]?.id; if (id && status?.routing?.config.enabled && prompted.current !== id) { prompted.current = id; setOpen(true); } }, [status]);
   const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [notice, setNotice] = useState('');
   useEffect(() => {
     if (!api) return;
@@ -25,6 +28,12 @@ export function VaultEntry({ api, compact = false, onVisibilityChange }: { api: 
     } catch { setError('The operation did not finish. Check the vault status before assuming it is locked.'); }
     finally { setPassword(''); setRepeat(''); setBusy(false); }
   };
+  const routeAction = async (request: VaultRequest) => {
+    setBusy(true); setError(''); setNotice('');
+    try { const response = await api.request(request); setStatus(response); if (response.error) setError(response.error); }
+    catch { setError('The routing request did not finish. Review the pending image before retrying.'); }
+    finally { setBusy(false); }
+  };
   if (status?.privateWorkspace) return <div className="vault-private-status"><span>Private · offline</span><button className="secondary-button" type="button" disabled={busy} title="Lock & close the private workspace" aria-label="Lock & close" onClick={() => void action('lock')}>Lock & close</button>{error ? <span role="alert">{error}</span> : null}</div>;
   return <>
     <button className="secondary-button vault-entry" type="button" aria-label="Encrypted libraries" title="Encrypted libraries" onClick={() => setOpen(true)}>{compact ? 'Vaults' : 'Encrypted libraries'}{status?.error ? ' (check status)' : status?.sessions.length ? ` (${status.sessions.length} unlocked)` : ''}</button>
@@ -43,6 +52,7 @@ export function VaultEntry({ api, compact = false, onVisibilityChange }: { api: 
         <label>Capacity ceiling in GB<input type="number" min={1} max={16384} value={size} onChange={(e) => setSize(Number(e.target.value))} /></label>
         <button className="secondary-button" disabled={busy || !password || !Number.isInteger(size) || size < 1 || size > 16384} type="button" onClick={() => void action('expand')}>Increase existing vault capacity…</button>
       </details>
+      <VaultRoutingSettings key={`${status.routing?.pending[0]?.id ?? 'none'}:${status.routing?.pending[0]?.folder ?? ''}`} status={status} busy={busy} send={routeAction} />
       {notice ? <p role="status">{notice}</p> : null}
       <p>New passwords need at least 12 characters. Passwords are not saved and cannot be recovered by this app. Files are accessible to your signed-in account while unlocked. Copies, exports and clipboard content outside the vault are not encrypted by it.</p>
       <p>The app requests a lock on screen lock or sleep. A busy volume stays visibly unlocked until it can unmount safely.</p>

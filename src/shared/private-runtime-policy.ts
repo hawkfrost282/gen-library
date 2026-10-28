@@ -4,7 +4,7 @@ import path from 'node:path';
 import { existsSync, lstatSync, readdirSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
 export const PRIVATE_LIBRARY_NAME = 'Private Library';
 export function privateCommandBlocked(type: string): boolean {
-  return /^(ai|sync|semantic|embedding|plugin|automation|extension|linked-folder)\./.test(type)
+  return /^vault\.source\./u.test(type) || /^(ai|sync|semantic|embedding|plugin|automation|extension|linked-folder)\./.test(type)
     || /^library\.(export|import|inspect|open-eagle|open-billfish|delete-from-disk)/.test(type)
     || /^asset\.(import-linked|import-eagle|import-billfish)/.test(type)
     || /^asset\.(open-external|open-with|reveal-in-folder|copy-file-path|copy|cut|export)/.test(type)

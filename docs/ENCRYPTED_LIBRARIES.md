@@ -14,6 +14,10 @@ To raise an existing vault’s ceiling, lock it first. Enter its password in the
 
 The same vault cannot open twice through two aliases in one controller. A separate background controller handles locking after the main application closes unexpectedly. On restart it checks its journal for unlocked volumes and attempts to secure them. A disk-operation timeout or failed status check is an error, never proof that a volume locked.
 
+## Optional NSFW moves
+
+The vault dialog includes an off-by-default NSFW routing rule. Choose a destination vault, enable routing, and use character tags such as `Character: Momo`. It can move new manual NSFW matches automatically when their character is unambiguous and the vault is unlocked, or ask you to review each image. Existing matches require **Review existing NSFW images**. A verified move removes the managed source only after the private copy and metadata are checked; an ordinary private-window import still just copies. See [routing behavior and limits](NSFW_ROUTING_PLAN.md).
+
 ## What is encrypted
 
 The container uses macOS APFS and AES-256 encryption through `hdiutil`. Inside it are the images, library database, tags, ratings, thumbnails, previews, private application preferences, Chromium cache/session data, application logs, crash-dump directory, and temporary-file directory. Passwords pass through a pipe and are not saved in command arguments, preferences or the recovery journal. No password recovery or automatic Keychain saving is provided.

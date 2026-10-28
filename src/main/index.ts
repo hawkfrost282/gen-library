@@ -1,5 +1,7 @@
 import { preparePrivateProfile, activatePrivateProfileEnvironment, PRIVATE_LIBRARY_NAME, assertPrivateCommand } from '../shared/private-runtime-policy';
 import { VaultClient } from './vault-client';
+import { VaultInbox } from './vault-inbox';
+import { VaultRouting } from './vault-routing';
 import { VAULT_CHANNEL, vaultRequestSchema, type VaultStatus } from '../shared/vault';
 import path from "node:path";
 import { APP_ID, APP_NAME, ENABLE_ENCRYPTED_LIBRARIES, ENABLE_BROWSER_CONNECTOR, ENABLE_UPSTREAM_UPDATES } from '../shared/brand';
@@ -620,6 +622,8 @@ if (privateWorkspace) {
   app.setPath('crashDumps', privateWorkspace.crashes);
 }
 let vaultClient: VaultClient | undefined;
+let vaultInbox: VaultInbox | undefined;
+let vaultRouting: VaultRouting | undefined;
 let privateLibraryPath: string | null = null;
 let vaultQuitReady = false;
 let vaultQuitting = false;
@@ -679,6 +683,7 @@ function embeddingHttp(): EmbeddingHttpIndex {
     loadService: (id) => parseEmbeddingServiceCatalog(readEmbeddingServices()).services.find((service) => service.id === id) ?? null,
     readKey: readEmbeddingServiceKey,
     isLibraryEnabled: (libraryId, serviceId) => {
+      if (vaultRouting?.enabled) return false;
       const binding = readEmbeddingBindings()[libraryId];
       // Renderer selects the global default when the library inherits settings.
       // Main does not own that preference; an absent per-library binding must
@@ -3061,7 +3066,7 @@ async function enqueueAutoAnalyzeAfterImport(
 ): Promise<void> {
   try {
     const config = loadAiConfig();
-    if (privateWorkspace || !config.autoAnalyzeEnabled || !config.hasKey || !config.apiFormat) return;
+    if (privateWorkspace || vaultRouting?.enabled || !config.autoAnalyzeEnabled || !config.hasKey || !config.apiFormat) return;
     if ((importedAssetIds.length === 0 && !folderId) || !workerClient) return;
 
     const result = await workerClient.request({
@@ -3084,7 +3089,7 @@ async function enqueueAutoAnalyzeAfterImport(
 }
 
 async function processAiQueue(libraryId: string): Promise<void> {
-  if (privateWorkspace) return;
+  if (privateWorkspace || vaultRouting?.enabled) return;
   try {
     const config = loadAiConfig();
     aiQueueScheduler.setRetryPolicy(config.reliabilitySettings);
@@ -3182,7 +3187,7 @@ async function processAiQueueBatch(
     const sliceSize = Math.max(1, Math.min(config.concurrencyLimit, 8));
     let processed = 0;
     let requeued = 0;
-    while (processed < maxJobs) {
+    while (processed < maxJobs && !vaultRouting?.enabled) {
       const requested = Math.min(sliceSize, maxJobs - processed);
       const result = await workerClient.request({
         type: "ai.process-queue",
@@ -3676,6 +3681,7 @@ async function handleLibraryRequest(
   };
   try {
     const request = parseRendererRequest(input);
+    if (vaultRouting?.enabled && (/^(sync|semantic|embedding)\./u.test(request.type) || request.type === 'ai.search-plan.request')) return { ok: false, error: createPublicError('NSFW_ROUTING_ACTIVE') };
     if (privateWorkspace) {
       try { assertPrivateCommand(request); }
       catch { return { ok: false, error: createPublicError('PRIVATE_WORKSPACE_RESTRICTED') }; }
@@ -3976,6 +3982,9 @@ async function handleLibraryRequest(
         }
         return result;
       })();
+    if (workerResult.ok && request.type === 'tag.assign.request' && vaultRouting?.enabled) {
+      void vaultRouting.enqueue(request.libraryId, request.assetIds, true).then(() => vaultRouting?.automaticallyMoveNew()).catch(() => {});
+    }
     if (navigationTrace) {
       navigationTrace.workerReturnedAt = performance.now();
       logNavigationStage("worker-returned", {
@@ -4900,6 +4909,7 @@ async function startApplication(): Promise<void> {
       ? { type: 'library.open', selectedLibraryPath: privateLibraryPath }
       : { type: 'library.create', displayName: PRIVATE_LIBRARY_NAME, selectedParentPath: privateWorkspace.root });
     if (!result.ok || result.type !== 'library.opened') throw new Error('The private library could not be opened. Close this workspace and lock the vault.');
+    vaultInbox = new VaultInbox(privateWorkspace.root, result.library.libraryId, (command) => workerClient!.request(command));
     rememberOpenedLibrary(result.library.libraryPath, result.library.displayName, result.library.libraryId);
     session.defaultSession.webRequest.onBeforeRequest({ urls: ['http://*/*','https://*/*','ws://*/*','wss://*/*'] }, (_details, callback) => callback({ cancel: true }));
     const closePrivate = () => { for (const window of BrowserWindow.getAllWindows()) window.hide(); app.quit(); };
@@ -4913,6 +4923,7 @@ async function startApplication(): Promise<void> {
     }
   } else if (process.platform === 'darwin' && vaultFeatureEnabled) {
     vaultClient = new VaultClient(path.join(__dirname, 'vault_supervisor.js'), { userData: app.getPath('userData'), executable: process.execPath, appPath: app.getAppPath(), packaged: app.isPackaged });
+    vaultRouting = new VaultRouting({ stateFile: path.join(app.getPath('userData'), 'nsfw-routing.json'), worker: (command) => workerClient!.request(command), vault: (command) => vaultClient!.request(command), clearCache: () => session.defaultSession.clearCache(), policyChanged: (enabled) => { if (enabled) { syncAutoScheduler?.stop(); aiQueueScheduler.clearAll(); void embeddingTestIndex?.close().catch(() => {}); void embeddingHttpIndex?.close().catch(() => {}); } else syncAutoScheduler?.start(); } });
     const lockVaults = () => { void vaultClient?.lockAll().catch(() => dialog.showErrorBox('A vault remains unlocked', 'Close files using the vault, then use Encrypted libraries → Lock.')); };
     powerMonitor.on('lock-screen', lockVaults); powerMonitor.on('suspend', lockVaults);
   }
@@ -4922,6 +4933,7 @@ async function startApplication(): Promise<void> {
     const parsed = vaultRequestSchema.safeParse(input);
     if (!parsed.success) return { ...snapshot(), error: 'Check the name, size and password. New passwords need at least 12 characters.' };
     const request = parsed.data;
+    const controller = async (command: Parameters<VaultClient['request']>[0]): Promise<VaultStatus> => { const result = await vaultClient!.request(command); return { ...result, ...(vaultRouting ? { routing: vaultRouting.snapshot() } : {}) }; };
     if (privateWorkspace) {
       if (request.operation === 'lock') setImmediate(() => { for (const window of BrowserWindow.getAllWindows()) window.hide(); app.quit(); });
       else if (request.operation !== 'status') return { ...snapshot(), error: 'Manage vaults from the main Gen Library window.' };
@@ -4929,22 +4941,30 @@ async function startApplication(): Promise<void> {
     }
     if (!vaultClient) return { ...snapshot(), error: 'Encrypted libraries are currently available on macOS.' };
     try {
+      if (request.operation === 'status') await vaultRouting?.refreshNext();
+      if (request.operation === 'routing.choose-vault') {
+        const selected = await dialog.showOpenDialog(mainWindow, { title: 'Choose the NSFW destination vault', properties: ['openFile', 'openDirectory'], filters: [{ name: 'Encrypted library', extensions: ['sparsebundle'] }] });
+        if (!selected.canceled && selected.filePaths[0]) vaultRouting?.chooseVault(selected.filePaths[0]);
+      } else if (request.operation === 'routing.configure') vaultRouting?.configure(request.enabled, request.automatic);
+      else if (request.operation === 'routing.skip-next') vaultRouting?.skipNext(request.id);
+      else if (request.operation === 'routing.review-existing') await vaultRouting?.reviewExisting();
+      else if (request.operation === 'routing.move-next') await vaultRouting?.moveNext(request.folder, request.rememberTag, request.id);
       if (request.operation === 'create') {
         const selected = await dialog.showSaveDialog(mainWindow, { title: 'Create encrypted library', defaultPath: path.join(app.getPath('home'), 'AI Projects', `${request.name}.sparsebundle`), buttonLabel: 'Create encrypted library', filters: [{ name: 'Encrypted library', extensions: ['sparsebundle'] }] });
-        if (selected.canceled || !selected.filePath) return vaultClient.request({ operation: 'status' });
-        return vaultClient.request({ ...request, image: selected.filePath });
+        if (selected.canceled || !selected.filePath) return controller({ operation: 'status' });
+        return controller({ ...request, image: selected.filePath });
       }
       if (request.operation === 'open' || request.operation === 'expand') {
         const selected = await dialog.showOpenDialog(mainWindow, { title: request.operation === 'expand' ? 'Increase vault capacity' : 'Unlock encrypted library', properties: ['openFile','openDirectory'], filters: [{ name: 'Encrypted library', extensions: ['sparsebundle'] }] });
-        if (selected.canceled || !selected.filePaths[0]) return vaultClient.request({ operation: 'status' });
-        return vaultClient.request({ ...request, image: selected.filePaths[0] });
+        if (selected.canceled || !selected.filePaths[0]) return controller({ operation: 'status' });
+        return controller({ ...request, image: selected.filePaths[0] });
       }
       if (request.operation === 'lock') {
         if (!request.id) return { ...snapshot(), error: 'Choose an unlocked vault to lock.' };
-        return vaultClient.request({ operation: 'lock', id: request.id });
+        return controller({ operation: 'lock', id: request.id });
       }
-      return vaultClient.request({ operation: 'status' });
-    } catch (error) { return { ...snapshot(), error: error instanceof Error ? error.message : 'The vault operation failed. Do not assume a mounted volume is locked.' }; }
+      return controller({ operation: 'status' });
+    } catch (error) { return { ...snapshot(), ...(vaultRouting ? { routing: vaultRouting.snapshot() } : {}), error: error instanceof Error ? error.message : 'The vault operation failed. Do not assume a mounted volume is locked.' }; }
   });
   workerClient.publishShowMissingLinkedFiles(showMissingLinkedFiles);
   // Serpent-65d837: remove any `.del-*` aside roots that could not be deleted
@@ -6189,7 +6209,7 @@ async function startApplication(): Promise<void> {
     resolveCredentials: (serverId) => resolveSyncServerCredentials(serverId),
     logger,
   });
-  syncAutoScheduler?.start();
+  if (!vaultRouting?.enabled) syncAutoScheduler?.start();
 
   // Serpent-85a9b0：生产启动自动打开上次使用的资源库（记住上次打开的库与
   // 文件夹——库打开后 renderer 的 browser-session 会恢复上次浏览的文件夹）。
@@ -7506,6 +7526,7 @@ if (!hasSingleInstanceLock) {
       return;
     }
     applicationQuitting = true;
+    vaultInbox?.stop(); vaultRouting?.stop();
     aiQueueScheduler.clearAll();
     criticalConfirmationWindowManager?.dispose();
     criticalConfirmationWindowManager = undefined;

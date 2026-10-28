@@ -1,3 +1,4 @@
+import { vaultSourceSchema, routedMetadataSchema } from '../vault-routing';
 import { z } from 'zod';
 
 import {
@@ -1518,6 +1519,9 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
     selectedLibraryPath: selectedPathSchema,
     replaceExisting: z.boolean().optional(),
   }),
+  z.strictObject({ type: z.literal('vault.source.prepare'), libraryId: identifierSchema, assetId: identifierSchema }),
+  z.strictObject({ type: z.literal('vault.source.remove'), source: vaultSourceSchema }),
+  z.strictObject({ type: z.literal('vault.destination.verify'), libraryId: identifierSchema, assetId: identifierSchema, sha256: z.string(), metadata: routedMetadataSchema }),
   z.strictObject({
     type: z.literal('library.recovery-report'),
     libraryId: identifierSchema,

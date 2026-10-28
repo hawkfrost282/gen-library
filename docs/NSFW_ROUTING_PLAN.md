@@ -1,25 +1,29 @@
-# Optional routing of tagged images into a vault
+# Optional NSFW vault routing — preview
 
-Status: design only. No routing toggle is exposed yet and no collection is migrated by these changes.
+Implemented in personal.4. Off by default. Development and native disk tests use only synthetic images.
 
-## User behavior
+## Use it
 
-- Off by default, with an explicitly chosen destination vault and matching tags. Start with exact, case-insensitive `NSFW`; do not infer image content or use substring matches.
-- Distinguish a verified **move** from a **copy**. A copy leaves the original outside encryption. The destination must be verified before any source can be removed.
-- For a locked destination, offer to unlock it. Do not silently route to an ordinary folder, save its password, or label an image protected while it remains outside the vault.
-- Ask separately before processing existing matches in bulk. Turning a rule on must not unexpectedly migrate the existing collection.
-- Offer per-image confirmation or automatic routing, chosen explicitly. Linked originals need a separate explicit policy because they may be used by other apps.
+1. Open Encrypted libraries and choose a destination vault under **NSFW routing**.
+2. Enable routing. Existing images are unchanged. New manual assignments are checked for an exact, case-insensitive `NSFW` tag; no image recognition or paid AI is used.
+3. Use `Character: Momo` to select a `Momo` folder in the vault. Alternatively enter a folder for a pending image and choose one existing character tag to remember. Multiple or missing character matches ask for a choice.
+4. With automatic moves off, use **Move next image**. With automatic moves on, new manual matches move only if one character is known and the selected vault is unlocked. A locked destination prompts for unlocking; its pending original is still outside encryption. After unlocking, choose Move next image.
+5. **Review existing NSFW images** queues matches from currently open libraries without automatically moving them. Review and move them one at a time. **Skip · keep outside vault** clears a pending item without changing its original.
 
-## Transfer requirements
+The destination and remembered character-tag/folder mappings are saved in ordinary app settings, outside encryption. Pending operational IDs survive app restart. Reopen their source libraries before continuing. The queue has a 10,000-image limit; review further batches after clearing it. Only manual tag assignments trigger this preview. AI/plugin/sync/import tag producers require explicit review; they are not presented as automatic routing.
 
-Route through the private workspace that owns the destination catalog. The main app must not open that live catalog with a second writer. An encrypted inbox and receipt can support private import without opening networking or plugins.
+## What a move does
 
-Preserve original image bytes, embedded generation information, tag names, rating, favorite marker, description, author, palette and source URL. Preserve or explicitly refuse multi-file assets, revision histories and companions; never drop them silently.
+The normal worker checks the source and computes content and metadata fingerprints. The vault controller stages it only inside the mounted encrypted volume. The private workspace imports through its existing worker, creates the character folder and restores tag names, stars, favorite, description, author and source URL. Exact original image bytes retain embedded prompts, models and LoRAs.
 
-A move requires a durable, verified destination receipt, content hashes and a check that the source revision and metadata have not changed. Retry safely after a crash without deleting an unverified source or creating endless duplicate copies. Full disks, cancellation, locking, missing sources, and stale source state must leave a recoverable result with honest status.
+The private worker verifies the destination and flushes its catalog and image before writing a receipt. Each attempt requires a fresh verification nonce; an old receipt cannot authorize deletion of a private image that was subsequently deleted or changed. Only after acknowledgement does the source worker recheck the original content, revision and metadata, cancel media jobs, remove its current derived artifacts and managed original/catalog entry, and set an undo barrier. The normal Chromium cache is cleared. Shared artifacts referenced by another asset remain for that asset.
 
-Ordinary delete helpers remove catalog rows and the original file but can leave derived artifact files behind. A privacy-oriented move must deliberately handle those thumbnails/previews as well, invalidate source caches and refresh the ordinary window. Existing backup databases, SQLite history/free pages, exports and OS-level traces are not retroactively encrypted; do not promise forensic erasure.
+This preview supports available managed single images with one revision. Linked files, sequences, revision histories and recognized JSON/TXT/XMP/YAML companion files are refused. Legacy nonempty manual palettes or incompatible tag names can prevent metadata verification; the original is retained rather than silently losing metadata. Collections, original folder hierarchy, AI analysis history and tag definitions/origins are not transferred. Tag names are preserved.
 
-Observe changes from all supported tag producers, including manual changes and library operations. Coalesce events and query matching tag IDs efficiently, without repeatedly loading every image or invoking an AI model. Prevent automated AI/sync work from being presented as private merely because a pending image has a matching tag.
+## Failure and privacy boundaries
 
-Use only synthetic libraries and vaults for development and destructive transfer tests.
+- New AI analysis and sync work in the normal app are paused while routing is enabled. Already submitted network requests cannot be recalled. Private workspaces remain offline regardless of the routing rule.
+- A failed or interrupted copy, locked/full vault, unsupported source, stale receipt or changed source leaves an original for review. Destination import progress and receipts support retry. Rare interruption between import commit and its progress record can leave an extra encrypted copy; review it instead of assuming exact-once import.
+- Pending originals are not encrypted. Enabling a rule is not proof that a collection has been protected. Do not remove external originals based solely on a tag.
+- Current source artifact removal and cache clearing do not erase old backup databases, undo/history records, SQLite free pages, original import locations, exports, clipboard content or OS-level traces. This feature is not forensic erasure or protection from software running as the signed-in user while a vault is unlocked.
+- Automatic routing is an early preview. Broad power-loss, removable-drive and sleep testing and independent security review remain outstanding.

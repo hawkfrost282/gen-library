@@ -1,3 +1,4 @@
+import { canonicalMetadata, type RoutedMetadata, type VaultSource } from '../shared/vault-routing';
 import { trashLinkedSource } from './trash-linked-source';
 import { randomUUID, createHash } from 'node:crypto';
 import {
@@ -20958,6 +20959,52 @@ export class LibraryService {
       source: 'client',
     });
     return { assetId: input.assetId, colorSpaceOverride: normalized };
+  }
+
+  private vaultMetadata(libraryId: string, assetId: string): RoutedMetadata {
+    const data = this.getAssetMetadata({ libraryId, assetId });
+    return canonicalMetadata({ description: data.description, rating: data.rating, favorite: data.favorite,
+      palette: data.palette === null ? null : JSON.parse(data.palette) as string[],
+      sourcePageUrl: data.sourcePageUrl, author: data.author, tags: data.tags.map((tag) => tag.name) });
+  }
+  prepareVaultTransfer(input: { libraryId: string; assetId: string }): VaultSource {
+    const open = this.requireOpenLibrary(input.libraryId);
+    const asset = this.listAssets({ ...input, assetIds: [input.assetId], recursive: true })[0];
+    const count = open.connection.prepare('SELECT COUNT(*) AS count FROM revisions WHERE asset_id = ?').get(input.assetId) as { count: number };
+    if (!asset || asset.locationKind !== 'managed' || asset.mediaType !== 'image' || asset.sequence || asset.deletedAt || asset.availability !== 'available' || count.count !== 1) throw new LibraryServiceError('INVALID_SELECTION');
+    const sourcePath = this.resolveAssetPath(input.libraryId, input.assetId);
+    if (!lstatSync(sourcePath).isFile() || lstatSync(sourcePath).isSymbolicLink()) throw new LibraryServiceError('INVALID_SELECTION');
+    const stem = sourcePath.slice(0, -path.extname(sourcePath).length);
+    if (['.json', '.txt', '.xmp', '.yaml', '.yml'].some((extension) => existsSync(stem + extension) || existsSync(sourcePath + extension))) throw new LibraryServiceError('INVALID_SELECTION');
+    const metadata = this.vaultMetadata(input.libraryId, input.assetId);
+    return { libraryId: input.libraryId, assetId: input.assetId, revisionId: asset.currentRevisionId, sourcePath, fileName: path.basename(sourcePath),
+      sha256: sha256FileAtPath(sourcePath), metadataHash: createHash('sha256').update(JSON.stringify(metadata)).digest('hex'), metadata };
+  }
+  async removeVaultTransferredSource(source: VaultSource): Promise<{ deletedCount: number }> {
+    const open = this.requireOpenLibrary(source.libraryId); this.assertLibraryWritable(open);
+    await this.cancelMediaJobsForAssets(open, [source.assetId]);
+    const current = this.prepareVaultTransfer({ libraryId: source.libraryId, assetId: source.assetId });
+    if (current.revisionId !== source.revisionId || current.sourcePath !== source.sourcePath || current.sha256 !== source.sha256 || current.metadataHash !== source.metadataHash) throw new LibraryServiceError('INVALID_STATE_TRANSITION');
+    const cached = open.connection.prepare('SELECT file_path FROM revision_artifacts WHERE revision_id IN (SELECT revision_id FROM revisions WHERE asset_id = ?)').all(source.assetId) as Array<{ file_path: string }>;
+    for (const row of cached) {
+      const shared = open.connection.prepare('SELECT 1 FROM revision_artifacts WHERE file_path = ? AND revision_id NOT IN (SELECT revision_id FROM revisions WHERE asset_id = ?) LIMIT 1').get(row.file_path, source.assetId);
+      if (!shared) {
+        try { rmSync(this.artifactFilePathFromRow(open, row.file_path), { force: true }); }
+        catch (error) { if (!(error instanceof LibraryServiceError) || error.code !== 'ASSET_NOT_FOUND') throw error; }
+      }
+    }
+    const result = this.deleteAssetsFromDisk({ libraryId: source.libraryId, assetIds: [source.assetId] });
+    this.invalidateArtifactPathCache(source.libraryId); this.emitClientAssetsChanged(source.libraryId, 1);
+    return result;
+  }
+  verifyVaultDestination(input: { libraryId: string; assetId: string; sha256: string; metadata: RoutedMetadata }): void {
+    const open = this.requireOpenLibrary(input.libraryId);
+    if (sha256FileAtPath(this.resolveAssetPath(input.libraryId, input.assetId)) !== input.sha256 || JSON.stringify(this.vaultMetadata(input.libraryId, input.assetId)) !== JSON.stringify(canonicalMetadata(input.metadata))) throw new LibraryServiceError('INVALID_STATE_TRANSITION');
+    const checkpoint = open.connection.pragma('wal_checkpoint(FULL)') as Array<{ busy: number }>;
+    if (checkpoint.some((row) => row.busy)) throw new LibraryServiceError('LIBRARY_NOT_WRITABLE');
+    for (const file of [this.resolveAssetPath(input.libraryId, input.assetId), path.join(open.summary.libraryPath, '.serpent', 'library.db')]) {
+      const fd = openSync(file, 'r'); try { fsyncSync(fd); } finally { closeSync(fd); }
+    }
   }
 
   getAssetMetadata(input: { libraryId: string; assetId: string }): AssetMetadataResult {

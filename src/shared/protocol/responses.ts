@@ -1,3 +1,4 @@
+import { vaultSourceSchema } from '../vault-routing';
 import { z } from 'zod';
 
 import { EMBEDDING_HTTP_ADAPTERS } from '../embedding/http-service';
@@ -1942,6 +1943,7 @@ const workerSuccessResultSchema = z.discriminatedUnion('type', [
       absolutePath: nonBlankString,
     })),
   }),
+  z.strictObject({ ok: z.literal(true), type: z.literal('vault.source.prepared'), source: vaultSourceSchema }),
   z.strictObject({
     ok: z.literal(true),
     type: z.literal('media.source-path'),

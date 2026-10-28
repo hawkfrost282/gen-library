@@ -2503,6 +2503,16 @@ function stopAutomaticWorkForLibrary(
 
 async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<WorkerResult> {
   switch (request.command.type) {
+    case 'vault.source.prepare': return { ok: true, type: 'vault.source.prepared', source: libraryService.prepareVaultTransfer(request.command) };
+    case 'vault.source.remove': {
+      const source = request.command.source; const lease = await libraryService.acquireWriteLease(source.libraryId);
+      try {
+        const result = await libraryService.removeVaultTransferredSource(source);
+        recordPermanentDeleteBarrier({ affectedCount: result.deletedCount, affectedEntities: [source.assetId], commandId: 'vault.move', labelKey: 'history.asset.delete-from-disk', libraryId: source.libraryId, reason: 'Verified move into encrypted storage' });
+        return { ok: true, type: 'asset.deleted-from-disk', deletedCount: result.deletedCount };
+      } finally { lease.release(); }
+    }
+    case 'vault.destination.verify': libraryService.verifyVaultDestination(request.command); return { ok: true, type: 'library.closed', libraryId: request.command.libraryId };
     case 'library.list':
     case 'library.change-sequence':
     case 'history.status':

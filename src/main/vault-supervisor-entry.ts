@@ -41,6 +41,9 @@ process.on('message', (message: unknown) => {
         send(id, manager.snapshot()); return;
       }
       const request = vaultCommandSchema.parse(command);
+      if (request.operation === 'transfer') {
+        const transferReceipt = await manager.transfer(request.image, request.source, request.folder); send(id, { ...manager.snapshot(), transferReceipt }); return;
+      }
       if (request.operation === 'create') await manager.create(request.image, request.name, request.password, request.sizeGiB);
       if (request.operation === 'open') await manager.open(request.image, request.password);
       if (request.operation === 'expand') {

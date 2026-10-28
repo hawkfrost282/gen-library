@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto';
+import type { VaultSource } from '../../src/shared/vault-routing';
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
-import { mkdtempSync, mkdirSync, chmodSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, chmodSync, readFileSync, readdirSync, existsSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { VaultManager } from '../../src/main/vault-manager';
@@ -92,4 +94,23 @@ describe('encrypted-library lifecycle', () => {
     await f.manager.recover(); expect(f.manager.snapshot().sessions[0]?.error).toContain('busy');
     f.setBusy(false); await f.manager.lockRecovered(); expect(f.manager.active).toBe(false);
   });
+});
+
+it('allows an explicit retry after an import error and waits for a fresh private acknowledgement', async () => {
+  const f = fixture(); const image = path.join(f.root, 'Private.sparsebundle');
+  await f.manager.create(image, 'Private', 'synthetic-password', 1);
+  const sourcePath = path.join(f.root, 'synthetic.png'); const data = Buffer.from('synthetic image bytes'); writeFileSync(sourcePath, data);
+  const source: VaultSource = { libraryId: 'synthetic-library', assetId: 'synthetic-asset', revisionId: 'synthetic-revision', sourcePath, fileName: 'synthetic.png', sha256: createHash('sha256').update(data).digest('hex'), metadataHash: 'b'.repeat(64), metadata: { description: null, rating: 5, favorite: true, palette: null, sourcePageUrl: null, author: null, tags: ['NSFW', 'Character: Momo'] } };
+  const mount = [...f.manager.sessions.values()][0]!.mount;
+  const first = f.manager.transfer(image, source, 'Momo');
+  const pending = path.join(mount, '.vault-transfers', 'pending'); const batch = path.join(pending, readdirSync(pending)[0]!);
+  writeFileSync(path.join(batch, 'error.json'), '{"message":"synthetic interruption"}');
+  await expect(first).rejects.toThrow('original has been kept');
+  const retry = f.manager.transfer(image, source, 'Momo');
+  expect(existsSync(path.join(batch, 'error.json'))).toBe(false);
+  const transfer = JSON.parse(readFileSync(path.join(batch, 'manifest.json'), 'utf8')) as { transferId: string; verificationNonce: string };
+  const receipt = { transferId: transfer.transferId, verificationNonce: transfer.verificationNonce, assetId: 'private-synthetic-asset', sha256: source.sha256, metadataHash: source.metadataHash };
+  writeFileSync(path.join(mount, '.vault-transfers', 'receipts', transfer.transferId + '.json'), JSON.stringify(receipt));
+  await expect(retry).resolves.toEqual(receipt); expect(readFileSync(sourcePath)).toEqual(data);
+  await f.manager.lockAll();
 });

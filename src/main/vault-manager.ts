@@ -189,6 +189,9 @@ export class VaultManager {
       copyFileSync(source.sourcePath, staged, constants.COPYFILE_EXCL); syncVaultFile(staged);
       if (vaultFileHash(staged) !== source.sha256) throw new Error('The source image changed during the copy. Its original has been kept.');
     }
+    // A new explicit attempt may resume an interrupted import after its cause is fixed.
+    // The coordinator never automatically retries a job carrying an error.
+    rmSync(path.join(batch, 'error.json'), { force: true });
     atomicVaultJson(manifest, { transferId, verificationNonce, source, folder });
     const deadline = Date.now() + 90_000;
     while (Date.now() < deadline) {

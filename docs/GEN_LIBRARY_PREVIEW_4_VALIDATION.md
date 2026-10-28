@@ -14,7 +14,7 @@ October 28, 2026. Native macOS arm64 preview, locally ad-hoc signed. Not Develop
 ## Verification
 
 - Full unit suite during development: 4,585 passed, 7 skipped. Subsequent changes also received focused routing, interface, appearance and lifecycle regression checks.
-- Focused unit/UI checks: 24 passed in the final run.
+- Focused unit/UI checks: 25 passed in the final run, including explicit retry after a failed private import.
 - Final worker/native routing checks: 7 passed, including actual encrypted APFS creation, transfer, lock and reopen; changed originals; damaged staging; fresh receipt verification; companion refusal; and source thumbnail cleanup.
 - Type checking, targeted lint, whitespace, packaged runtime verification and local signature verification passed.
 - The actual packaged application opened an isolated synthetic source/profile. Choosing a vault left routing off. A manual NSFW tag queued an image, identified Momo, and left the source present while the destination was locked. A restart recovered its pending tags and folder. Unlocking and selecting Move next image then completed the move.

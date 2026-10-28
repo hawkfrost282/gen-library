@@ -2696,6 +2696,7 @@ export const zhCN = {
   error: {
     code: {
       CANCELLED: "操作已取消，没有做任何改动。",
+      PRIVATE_WORKSPACE_RESTRICTED: "This feature is disabled in a private workspace. Cloud AI, sync, plugins, linked sources and external sharing are unavailable.",
       INTERNAL_ERROR: "发生了未能分类的内部错误，界面无法给出更具体的原因。请打开「诊断日志」查看本次记录后重试；如果正在打开资源库，请把整个资源库文件夹复制到本机磁盘再打开。",
       INVALID_LIBRARY_NAME: "请输入可跨平台安全使用的资源库名称。",
       INVALID_LIBRARY_PATH: "所选位置不能作为资源库文件夹。请选择已存在且可写入的文件夹，不要选择文件或已断开的磁盘。",

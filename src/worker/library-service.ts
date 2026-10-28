@@ -4671,7 +4671,8 @@ export function defaultSpawnFn(
     let settled = false;
     let killTimer: ReturnType<typeof setTimeout> | undefined;
 
-    const proc: ChildProcess = spawn(command, args, {
+    const privateMedia = process.env.GEN_LIBRARY_PRIVATE_WORKSPACE === '1' && /^ff(?:mpeg|probe)(?:\.exe)?$/i.test(path.basename(command));
+    const proc: ChildProcess = spawn(command, privateMedia ? ['-protocol_whitelist', 'file,pipe', ...args] : args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });

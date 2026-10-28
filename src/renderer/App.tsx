@@ -1,3 +1,5 @@
+import { VaultEntry } from './VaultEntry';
+import type { VaultApi } from '../shared/vault';
 import { LocalConfirmationHost, useLocalConfirmation, requestConfirmation } from "./local-confirmation";
 import {
   useCallback,
@@ -715,6 +717,7 @@ const NETWORK_LIBRARY_RELOAD_INTERVAL_MS = 750;
 type RendererWindow = Window & {
   serpent?: {
     library?: SerpentLibraryApi;
+    vault?: VaultApi;
     shell?: SerpentShellApi;
     appUpdate?: SerpentAppUpdateApi;
     automation?: SerpentAutomationScriptApi;
@@ -879,6 +882,8 @@ function ToolButton({
 }
 
 function AppInner() {
+  const privateWorkspace = (window as RendererWindow).serpent?.vault?.privateWorkspace === true;
+  const [encryptedDialogOpen, setEncryptedDialogOpen] = useState(false);
   const shellLayout = useShellLayout();
   const localConfirmation = useLocalConfirmation();
   const shortcutRuntimeVersion = useShortcutRuntimeVersion();
@@ -1891,7 +1896,7 @@ function AppInner() {
       setPluginContributionEpoch((current) => current + 1);
     });
   }, []);
-  const pluginManagerApi = (window as RendererWindow).serpent?.plugins;
+  const pluginManagerApi = privateWorkspace ? undefined : (window as RendererWindow).serpent?.plugins;
   const pluginSidebarViews = usePluginSidebarViews(
     (window as RendererWindow).serpent?.plugins,
     library?.libraryId,
@@ -2808,7 +2813,7 @@ function AppInner() {
   useEffect(() => subscribeEmbeddingInstallActivity(setEmbeddingInstalling), []);
   const openLibraryId = library?.libraryId ?? null;
   useEffect(() => {
-    if (!api || !openLibraryId) return;
+    if (privateWorkspace || !api || !openLibraryId) return;
     let cancelled = false;
     const load = async () => {
       const [binding, status, services] = await Promise.all([
@@ -2852,7 +2857,7 @@ function AppInner() {
       cancelled = true;
       unsubscribe();
     };
-  }, [api, openLibraryId]);
+  }, [api, openLibraryId, privateWorkspace]);
   const activeEmbeddingBinding = embeddingForLibraryId === openLibraryId ? embeddingBinding : null;
   const embeddingSelectionId = resolveEffectiveEmbeddingSelection({
     globalEnabled: semanticSearchPrefs.enabled,
@@ -12375,7 +12380,7 @@ function AppInner() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      if (!api || !activeLibraryId) {
+      if (privateWorkspace || !api || !activeLibraryId) {
         if (!cancelled) setSyncBindingStatus("none");
         return;
       }
@@ -12390,7 +12395,7 @@ function AppInner() {
     return () => {
       cancelled = true;
     };
-  }, [api, activeLibraryId]);
+  }, [api, activeLibraryId, privateWorkspace]);
 
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
@@ -12597,7 +12602,7 @@ function AppInner() {
   }
 
   async function loadAiConfig() {
-    if (!api) return;
+    if (privateWorkspace || !api) return;
     try {
       const result = await api.getAiConfig();
       if (!result.ok) {
@@ -13251,7 +13256,7 @@ function AppInner() {
   }
 
   async function loadAiJobs(quiet = false) {
-    if (!api || !library) return;
+    if (privateWorkspace || !api || !library) return;
     if (!quiet) setMediaJobsLoading(true);
     try {
       const result = await api.getAiJobStatus({ libraryId: library.libraryId });
@@ -14176,6 +14181,7 @@ function AppInner() {
         <div className="toolbar-cluster toolbar-workspace-cluster">
           <div className="toolbar-workspace-main">
             <div className="toolbar-workspace-leading">
+            <VaultEntry compact api={(window as RendererWindow).serpent?.vault} onVisibilityChange={setEncryptedDialogOpen} />
               <ScopeHistoryButtons
                 // Serpent-b7e173：预览已是历史条目（打开查看器必压在某浏览 scope 上），
                 // 所以后退/前进由纯历史驱动即可，无需对预览做任何特判。
@@ -14807,7 +14813,7 @@ function AppInner() {
             <PluginToolbarButtons
               disabled={busy || library === null || showTagManagement || showPluginSidebarView}
               libraryId={library?.libraryId}
-              pluginApi={(window as RendererWindow).serpent?.plugins}
+              pluginApi={pluginManagerApi}
               refreshKey={pluginContributionRefreshKey}
               selectedAssetIds={selectedAssetIds}
               selectedAssets={selectedVisibleAssets}
@@ -14835,7 +14841,7 @@ function AppInner() {
         <PluginWorkspaceViews
           disabled={busy || library === null || showTagManagement || showPluginSidebarView}
           libraryId={library?.libraryId}
-          pluginApi={(window as RendererWindow).serpent?.plugins}
+          pluginApi={pluginManagerApi}
           refreshKey={pluginContributionRefreshKey}
         />
         {!showTagManagement && !showPluginSidebarView && (
@@ -15107,7 +15113,7 @@ function AppInner() {
             <PluginSidebarViewPanel
               activeView={activePluginSidebarView}
               libraryId={library.libraryId}
-              pluginApi={(window as RendererWindow).serpent?.plugins}
+              pluginApi={pluginManagerApi}
             />
           ) : library && showTagManagement ? (
             <TagManagementWorkspace
@@ -15980,7 +15986,7 @@ function AppInner() {
                 ? () => navigateAssetPreview(visibleAssets[previewIndex - 1]!)
                 : undefined
             }
-            pluginApi={(window as RendererWindow).serpent?.plugins}
+            pluginApi={pluginManagerApi}
             pluginContributionRefreshKey={pluginContributionRefreshKey}
           />
           </>
@@ -16036,7 +16042,7 @@ function AppInner() {
         selectedAssets={selectedAssets}
         multiEdit={multiEdit}
         versionConflict={versionConflict}
-        pluginApi={(window as RendererWindow).serpent?.plugins}
+        pluginApi={pluginManagerApi}
         libraryId={library?.libraryId}
         pluginContributionRefreshKey={pluginContributionRefreshKey}
         extractedMetadataRefreshKey={extractedMetadataRefreshKey}
@@ -16222,6 +16228,7 @@ function AppInner() {
         onCancel={() => setRenameTarget(null)}
       />
       <AppSettingsDialog
+        privateWorkspace={privateWorkspace}
         activeCategory={appSettingsCategory}
         aiConfigPanel={
           <AiConfigDialog
@@ -16364,7 +16371,7 @@ function AppInner() {
             "https://github.com/dolag233/Serpent-Extension/releases/latest",
           );
         }}
-        pluginApi={(window as RendererWindow).serpent?.plugins}
+        pluginApi={pluginManagerApi}
         pluginContributionRefreshKey={pluginContributionRefreshKey}
         libraryId={library?.libraryId}
         mcpApi={(window as RendererWindow).serpent?.mcp}
@@ -16634,6 +16641,8 @@ function AppInner() {
         />
       ) : null}
       <CreateDialog
+        subdialogOpen={encryptedDialogOpen}
+        encryptedEntry={<VaultEntry api={(window as RendererWindow).serpent?.vault} onVisibilityChange={setEncryptedDialogOpen} />}
         busy={busy}
         open={dialog === "library"}
         phase={createLibraryPhase}
@@ -16836,7 +16845,7 @@ function AppInner() {
         libraryId={library?.libraryId}
         pluginBrowseScope={pluginBrowseScope}
         pluginViewerState={pluginViewerState}
-        pluginApi={(window as RendererWindow).serpent?.plugins}
+        pluginApi={pluginManagerApi}
         pluginContributionRefreshKey={pluginContributionRefreshKey}
         tags={tags}
         collections={collections}

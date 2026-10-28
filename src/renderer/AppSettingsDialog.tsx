@@ -35,6 +35,7 @@ import { DialogShell } from "./ui/patterns";
 
 export interface AppSettingsDialogProps {
   open: boolean;
+  privateWorkspace?: boolean;
   activeCategory: AppSettingsCategoryId;
   onClose: () => void;
   onActiveCategoryChange: (category: AppSettingsCategoryId) => void;
@@ -80,6 +81,7 @@ export interface AppSettingsDialogProps {
  */
 export function AppSettingsDialog({
   open,
+  privateWorkspace = false,
   activeCategory,
   onClose,
   onActiveCategoryChange,
@@ -125,7 +127,7 @@ export function AppSettingsDialog({
   const [pluginSettingsRefreshKey, setPluginSettingsRefreshKey] = useState(0);
   const pluginSettingsRefreshToken = `${pluginContributionRefreshKey ?? ''}:${pluginSettingsRefreshKey}`;
   const pluginSettingsEntries = usePluginSettingsNavEntries(
-    pluginApi,
+    privateWorkspace ? undefined : pluginApi,
     libraryId,
     open ? pluginSettingsRefreshToken : null,
   );
@@ -263,6 +265,7 @@ export function AppSettingsDialog({
             ) : null}
             {!showingPluginSettings && activeCategory === "general" ? (
               <GeneralSettingsPage
+                privateWorkspace={privateWorkspace}
                 onOpenAppLog={onOpenAppLog}
                 onOpenExtensionReleases={onOpenExtensionReleases}
               />
@@ -299,21 +302,22 @@ export function AppSettingsDialog({
                 videoTransportOnApproach={videoTransportOnApproach}
               />
             ) : null}
-            {!showingPluginSettings && activeCategory === "ai" ? (
+            {privateWorkspace && ["ai", "semantic-search", "mcp", "plugins", "sync"].includes(activeCategory) ? <p>Private workspaces stay offline. AI connections, model services, automation, plugins and sync are disabled here. Embedded prompts and generation details are still read locally.</p> : null}
+            {!showingPluginSettings && activeCategory === "ai" && !privateWorkspace ? (
               <AiSettingsPage
                 aiUiPrefs={aiUiPrefs}
                 aiConfigPanel={aiConfigPanel}
                 onToggleShowAiBadges={onToggleShowAiBadges}
               />
             ) : null}
-            {!showingPluginSettings && activeCategory === "semantic-search" ? (
+            {!showingPluginSettings && activeCategory === "semantic-search" && !privateWorkspace ? (
               <SemanticSearchSettings
                 libraryId={libraryId}
                 servicesApi={embeddingServicesApi}
               />
             ) : null}
-            {!showingPluginSettings && activeCategory === "mcp" ? <McpSettingsPage api={mcpApi} onOpenAppLog={onOpenAppLog} /> : null}
-            {!showingPluginSettings && !showingCommunity && activeCategory === "plugins" ? (
+            {!showingPluginSettings && activeCategory === "mcp" && !privateWorkspace ? <McpSettingsPage api={mcpApi} onOpenAppLog={onOpenAppLog} /> : null}
+            {!showingPluginSettings && !showingCommunity && activeCategory === "plugins" && !privateWorkspace ? (
               <PluginSettingsPage
                 api={pluginApi}
                 libraryId={libraryId}
@@ -333,7 +337,7 @@ export function AppSettingsDialog({
                 refreshKey={pluginSettingsRefreshToken}
               />
             ) : null}
-            {!showingPluginSettings && activeCategory === "sync" ? (
+            {!showingPluginSettings && activeCategory === "sync" && !privateWorkspace ? (
               <SyncSettingsPage
                 callbacks={syncServerCallbacks}
                 onShowCardSyncStatusChange={onShowCardSyncStatusChange}

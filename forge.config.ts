@@ -194,6 +194,11 @@ const config: ForgeConfig = {
           target: 'preload',
         },
         {
+          entry: 'src/main/vault-supervisor-entry.ts',
+          config: 'vite.vault.config.ts',
+          target: 'main',
+        },
+        {
           entry: 'src/worker/index.ts',
           config: 'vite.worker.config.ts',
           target: 'main',

@@ -1,4 +1,4 @@
-import { type FormEvent } from "react";
+import { type FormEvent, type ReactNode } from "react";
 import { Icon } from "./Icons";
 import { iconActionAttrs } from "./icon-action-attrs";
 import { useT } from "./i18n";
@@ -34,6 +34,8 @@ export interface CreateDialogProps {
   onForgetRecent?: (path: string) => void;
   recentLibraries?: RecentLibraryMenuEntry[];
   busy?: boolean;
+  encryptedEntry?: ReactNode;
+  subdialogOpen?: boolean;
   /**
    * When true (no library open), hide dismiss controls so the surface stays
    * until a library is opened or created.
@@ -63,6 +65,8 @@ export function CreateDialog({
   onForgetRecent,
   recentLibraries = [],
   busy = false,
+  encryptedEntry,
+  subdialogOpen = false,
   required = false,
 }: CreateDialogProps) {
   const t = useT();
@@ -103,6 +107,7 @@ export function CreateDialog({
       <DialogShell
         className="create-dialog create-library-dialog"
         dialogId="create-library-dialog"
+        isTopmost={!subdialogOpen}
         headerActions={
           !required ? (
             <button
@@ -198,6 +203,7 @@ export function CreateDialog({
                   <Icon name="download" size={15} />
                   {t("toolbar.importLibrary")}
                 </button>
+                {encryptedEntry}
               </>
             ) : null}
           </div>

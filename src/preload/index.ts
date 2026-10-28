@@ -1,5 +1,6 @@
 import { contextBridge } from 'electron';
 
+import { vault } from './bridge/vault';
 import { appUpdate } from './bridge/app-update';
 import { automation } from './bridge/automation';
 import {
@@ -59,6 +60,7 @@ contextBridge.exposeInMainWorld(
   'serpent',
   Object.freeze({
     library,
+    vault,
     shell,
     shortcuts,
     startup,

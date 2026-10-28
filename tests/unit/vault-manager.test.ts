@@ -1,0 +1,64 @@
+import { EventEmitter } from 'node:events';
+import type { ChildProcess } from 'node:child_process';
+import { mkdtempSync, mkdirSync, chmodSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { VaultManager } from '../../src/main/vault-manager';
+const roots: string[] = [];
+function fixture() {
+  mkdirSync('.local', { recursive: true }); const root = mkdtempSync(path.resolve('.local/vault-unit-')); roots.push(root);
+  let busy = false;
+  const run = vi.fn(async (args: string[]) => { if (args[0] === 'create') mkdirSync(args.at(-1)!, { recursive: true }); if (args[0] === 'attach') chmodSync(args.at(-1)!, 0o700); if (args[0] === 'detach') { if (busy) throw new Error('Volume busy'); chmodSync(path.dirname(args[1]!), 0o700); rmSync(args[1]!, { recursive: true, force: true }); } return ''; });
+  const spawn = vi.fn<(args: string[], env: NodeJS.ProcessEnv) => ChildProcess>(() => {
+    const child = new EventEmitter() as ChildProcess;
+    Object.assign(child, { exitCode: null, signalCode: null, kill: vi.fn(() => { queueMicrotask(() => child.emit('exit', 0)); return true; }) });
+    return child;
+  });
+  const info = vi.fn(async (args: string[]): Promise<Record<string, unknown>> => args[0] === 'isencrypted' ? { encrypted: true } : { images: [] });
+  const manager = new VaultManager({ userData: root, mountRoot: path.join(root, 'vault-mounts'), executable: '/app/Electron', appPath: '/app/app.asar', packaged: true, runDisk: run, info, spawnWorkspace: spawn });
+  return { root, run, spawn, info, manager, setBusy(value: boolean) { busy = value; } };
+}
+afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+describe('encrypted-library lifecycle', () => {
+  it('passes passwords through the runner separately and keeps them out of arguments, child environment and journal', async () => {
+    const f = fixture(); const secret = 'synthetic-unit-password';
+    await f.manager.create(path.join(f.root, 'Private.sparsebundle'), 'Private', secret, 1);
+    expect(f.run.mock.calls[0]?.[0]).toContain('AES-256');
+    expect(JSON.stringify(f.run.mock.calls.map((call) => call[0]))).not.toContain(secret);
+    expect(readFileSync(path.join(f.root, 'vault-sessions.json'), 'utf8')).not.toContain(secret);
+    const options = f.spawn.mock.calls[0]!; expect(JSON.stringify(options)).not.toContain(secret);
+    const mount = [...f.manager.sessions.values()][0]!.mount;
+    expect(options[1].TMPDIR).toBe(path.join(mount, '.tmp'));
+    expect(options[1].GEN_LIBRARY_PRIVATE_ROOT).toBe(mount);
+    expect(options[0]).toContain(`--user-data-dir=${path.join(mount, '.gen-library-profile')}`);
+    expect(f.manager.snapshot().sessions).toHaveLength(1);
+    await f.manager.lockAll(); expect(f.manager.snapshot().sessions).toHaveLength(0);
+    expect(f.run.mock.calls.filter((call) => call[0][0] === 'detach')).toHaveLength(1);
+    expect(f.run.mock.calls.some((call) => call[0].includes('-force'))).toBe(false);
+  });
+  it('keeps a busy volume visibly unlocked, then allows a successful retry', async () => {
+    const f = fixture(); await f.manager.create(path.join(f.root, 'Private.sparsebundle'), 'Private', 'synthetic-password', 1);
+    f.setBusy(true); await expect(f.manager.lockAll()).rejects.toThrow('unlocked');
+    expect(f.manager.snapshot().sessions[0]?.error).toContain('busy');
+    f.setBusy(false); await f.manager.lockAll(); expect(f.manager.active).toBe(false);
+  });
+  it('rejects an unencrypted image before attaching it', async () => {
+    const f = fixture(); f.info.mockResolvedValue({ encrypted: false });
+    await expect(f.manager.open(path.join(f.root, 'plain.sparsebundle'), 'synthetic')).rejects.toThrow('not encrypted');
+    expect(f.run).not.toHaveBeenCalled(); expect(f.spawn).not.toHaveBeenCalled();
+  });
+  it('rejects opening a second workspace through an alias of the same encrypted container', async () => {
+    const f = fixture(); const image = path.join(f.root, 'Private.sparsebundle');
+    await f.manager.create(image, 'Private', 'synthetic-password', 1);
+    const alias = path.join(f.root, 'Alias.sparsebundle'); symlinkSync(image, alias, 'dir');
+    await expect(f.manager.open(alias, 'synthetic-password')).rejects.toThrow('already unlocked');
+    expect(f.spawn).toHaveBeenCalledOnce(); await f.manager.lockAll();
+  });
+  it('recovers a mounted volume from the journal and never claims it is locked when detach fails', async () => {
+    const f = fixture(); const id = '744d0d74-9b6b-4f3f-95c2-b7d6af7b8000'; const mount = path.join(f.root, 'vault-mounts', id, 'v'); mkdirSync(mount, { recursive: true });
+    writeFileSync(path.join(f.root, 'vault-sessions.json'), JSON.stringify([{ id, name: 'Recovered', image: path.join(f.root, 'vault.sparsebundle'), mount }]));
+    f.info.mockResolvedValue({ images: [{ 'system-entities': [{ 'mount-point': mount }] }] }); f.setBusy(true);
+    await f.manager.recover(); expect(f.manager.snapshot().sessions[0]?.error).toContain('busy');
+    f.setBusy(false); await f.manager.lockRecovered(); expect(f.manager.active).toBe(false);
+  });
+});

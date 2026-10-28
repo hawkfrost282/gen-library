@@ -5,3 +5,6 @@ export const APP_ID = 'com.hawkfrost.genlibrary';
 export const ENABLE_UPSTREAM_UPDATES = false;
 // The original connector has no pairing flow. Keep it closed until a paired companion exists.
 export const ENABLE_BROWSER_CONNECTOR = false;
+
+// macOS development preview; see docs/ENCRYPTED_LIBRARIES.md for behavior and limits.
+export const ENABLE_ENCRYPTED_LIBRARIES = true;

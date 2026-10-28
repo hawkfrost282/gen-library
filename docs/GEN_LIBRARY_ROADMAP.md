@@ -4,15 +4,15 @@
 
 Generation-metadata extraction and inspector display, temporary identity and icon, production dependency updates, safer linked-original deletion, verified optional model/runtime downloads, static HTML previews, and a disabled unpaired browser listener. See the root README for the exact scope and limitations.
 
-## Encrypted libraries: next substantial feature
+## Encrypted libraries: macOS preview
 
 A hidden folder or hidden tag is not encryption. Encrypt the images **and** everything that can reveal their content: catalog, tags, thumbnails, previews, local indexes, application cache, session data and logs.
 
-Proposed macOS design: a password-protected AES-256 sparse bundle, opening a separate application workspace whose entire profile and library live inside the mounted encrypted volume. Ordinary images remain ordinary files while the volume is unlocked. Locking must close that workspace, finish database writes, release file handles, and successfully unmount the volume before showing “locked.” A busy volume must remain visibly unlocked with an actionable error. Never force-unmount or silently discard changes.
+Implemented macOS design: a password-protected AES-256 sparse bundle, opening a separate application workspace whose entire profile and library live inside the mounted encrypted volume. Ordinary images remain ordinary files while the volume is unlocked. Locking must close that workspace, finish database writes, release file handles, and successfully unmount the volume before showing “locked.” A busy volume must remain visibly unlocked with an actionable error. Never force-unmount or silently discard changes.
 
 Passwords should travel over a pipe to macOS disk utilities, not command-line arguments, preferences, logs, GitHub, or an AI provider. Start without saved passwords or recovery-key automation. Sleep/screen-lock behavior, unexpected exits, interrupted writes, mount recovery, thumbnails, temporary files, backups, and export paths all need explicit validation before real private images are imported. Encryption protects a locked volume; files are accessible to the signed-in account while unlocked.
 
-A preliminary local experiment exists outside the application source. It is not integrated, tested for real use, or included in the preview. Existing originals must not be silently moved, deleted, or claimed to be protected merely because a copy was imported into a vault.
+The integrated preview has native synthetic tests for encryption, wrong passwords, reopening, parent disconnection, controller crashes, recovery, and refusing plaintext recreation after an unexpected unmount. Private-window import, embedded generation details, ratings, favorites, and Lock & close have also been exercised. An actual screen-lock event closed and unmounted the test workspace. See [the usage and limits](ENCRYPTED_LIBRARIES.md). Broad sleep/resume, power-loss and external-drive testing, plus independent security review, remain outstanding. Existing originals must not be silently moved, deleted, or claimed to be protected merely because a copy was imported into a vault.
 
 ## Metadata and organization
 

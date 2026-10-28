@@ -19761,3 +19761,16 @@ body.platform-darwin .app-shell[data-shell-layout="islands"] .toolbar-nav-cluste
 .generation-field-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .generation-details button { padding: 4px 9px; border: 1px solid var(--divider); border-radius: calc(6px * var(--ui-radius-scale, 1)); background: transparent; color: inherit; cursor: pointer; }
 .generation-details pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; font: inherit; font-size: 12px; line-height: 1.55; user-select: text; }
+
+/* Encrypted-library controls share the application's dialog and theme system. */
+.vault-dialog { width: min(680px, calc(100vw - 48px)); max-height: calc(100vh - 64px); overflow: auto; }
+.vault-dialog p { line-height: 1.5; color: var(--text); }
+.vault-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 18px 0; }
+.vault-fields label { display: flex; flex-direction: column; gap: 7px; }
+.vault-fields input { min-width: 0; padding: 8px; color: var(--text); background: var(--pane); border: 1px solid var(--divider); border-radius: calc(6px * var(--ui-radius-scale, 1)); }
+.vault-session { padding: 12px; margin: 10px 0; border: 1px solid var(--divider); border-radius: calc(8px * var(--ui-radius-scale, 1)); }
+.vault-session button { margin-left: 12px; }
+.vault-private-status { display: flex; flex-shrink: 0; align-items: center; gap: 10px; font-size: 12px; white-space: nowrap; }
+.toolbar-workspace-leading .vault-entry { flex-shrink: 0; white-space: nowrap; }
+
+.vault-entry, .vault-private-status { -webkit-app-region: no-drag; }

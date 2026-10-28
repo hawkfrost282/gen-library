@@ -1,3 +1,4 @@
+import { assertPrivateCommand } from '../shared/private-runtime-policy';
 import { randomUUID } from 'node:crypto';
 import {
   parseWorkerRequest,
@@ -2302,6 +2303,8 @@ function destructiveBackupLibraryId(command: WorkerCommand): string | undefined 
 }
 
 async function handleRequest(request: WorkerRequest): Promise<WorkerResult> {
+  try { assertPrivateCommand(request.command); }
+  catch { return { ok: false, error: createPublicError('PRIVATE_WORKSPACE_RESTRICTED') }; }
   if (request.command.type === 'library.open' || request.command.type === 'library.close'
     || request.command.type === 'library.delete-from-disk') {
     await closeSemanticIndexWorkerLibrary(request.command.type === 'library.open' ? undefined : request.command.libraryId);

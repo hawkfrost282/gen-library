@@ -156,8 +156,8 @@ export async function selectImportSources(
     host.getLocale(),
     id,
     sourceKind === "files"
-      ? ["openFile", "multiSelections"]
-      : ["openDirectory"],
+      ? ["openFile", "multiSelections", "showHiddenFiles"]
+      : ["openDirectory", "showHiddenFiles"],
   );
   const result = await showOpen(host, options);
   return result.canceled || result.filePaths.length === 0

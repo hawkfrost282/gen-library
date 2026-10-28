@@ -2,10 +2,11 @@
 
 Gen Library is a personal image-library fork of [Serpent](https://github.com/dolag233/Serpent), based on version 0.3.3 (`dbf4c27`). It keeps Serpent's readable `Assets` folders, tagging, ratings, collections, and Finder access, with changes focused on generated-image metadata and safer file handling.
 
-This is an early macOS development preview, not a finished release. The name and simplified ghost-and-books icon are provisional. Original MIT copyright and third-party notices are preserved.
+This is an early macOS development preview, not a finished release. The name and cleaner 3D ghost-and-books icon are provisional. Original MIT copyright and third-party notices are preserved.
 
 ## What this preview adds
 
+- **Encrypted libraries on macOS (preview):** password-protected AES-256 storage with a separate offline workspace. Images, the catalog, ratings, tags, thumbnails and the private application profile stay inside the encrypted volume. Locking closes the workspace and unmounts safely; busy volumes remain visibly unlocked. See [usage and limits](docs/ENCRYPTED_LIBRARIES.md).
 - **Generation details** in the image inspector: embedded prompt, negative prompt, generation models, LoRA names, seed, sampler, steps, guidance and dimensions when available. Supports common ComfyUI API graphs, AUTOMATIC1111-compatible parameters, and Draw Things / compatible JSON comments in supported image formats. Copy full prompts or inspect the raw generation data. Extraction runs locally, without an AI API call.
 - **Safer linked-file deletion:** linked originals go to the operating system's Trash. Filenames are treated as literal paths. A failed Trash operation never falls back to permanent removal. Reimport recovered files to restore their library records. Separate managed-file permanent-delete actions still require their existing confirmations.
 - **Verified optional local-model downloads:** only pinned official URLs are used; downloaded files must match the recorded size and SHA-256 before installation. Unverified mirrors are removed.
@@ -18,7 +19,7 @@ Imported files are still copied into normal library directories. Linked folders 
 
 ## Next development stages
 
-See [the roadmap](docs/GEN_LIBRARY_ROADMAP.md). Encrypted libraries are **not implemented or enabled in this preview**. Ordinary libraries, tags, thumbnails and the catalog are not encrypted. AI connection improvements and intentional social publishing are separate work.
+See [the roadmap](docs/GEN_LIBRARY_ROADMAP.md). Encrypted libraries are an early macOS preview, tested with synthetic data. Ordinary libraries, tags, thumbnails and catalogs remain unencrypted. Searchable generation fields, rating definitions and an independent “absolute best” workflow are still planned. AI connection improvements and intentional social publishing are separate work.
 
 ## Build on macOS
 

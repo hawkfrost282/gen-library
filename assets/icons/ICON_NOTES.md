@@ -1,6 +1,6 @@
 # Gen Library icon revision
 
-The default is now the simpler ghost-and-books image in `source-app.png`. The cleaner dimensional alternative is `concepts/ghost-library-dimensional.png`. `concepts/dock-comparison.png` compares the previous scene and both revisions at 128, 64 and 32 pixels.
+The default is now the cuter dimensional ghost-and-books image in `source-app.png`, as selected by the user. The flatter alternative is `concepts/ghost-library-flat.png`. `concepts/dock-comparison.png` compares the previous scene and both revisions at 128, 64 and 32 pixels.
 
 Both revisions were generated with the built-in image-generation tool. The original library scene was used only as a character reference. The ghost's large eyes, rosy cheeks, tiny smile and artwork were retained; no letter or G mark was added. The original scene remains in Git history at commit `e45347f`.
 

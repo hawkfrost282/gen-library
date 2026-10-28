@@ -1,3 +1,4 @@
+import { ENABLE_BROWSER_CONNECTOR } from '../shared/brand';
 import { setShellLayout, useShellLayout } from "./ui/use-shell-layout";
 import { useState, type ReactNode } from "react";
 
@@ -109,9 +110,11 @@ function SettingsToggleRow({
 }
 
 export function GeneralSettingsPage({
+  privateWorkspace = false,
   onOpenAppLog,
   onOpenExtensionReleases,
 }: {
+  privateWorkspace?: boolean;
   onOpenAppLog?: () => void;
   onOpenExtensionReleases?: () => void;
 } = {}): ReactNode {
@@ -140,7 +143,7 @@ export function GeneralSettingsPage({
 
   return (
     <>
-      {startup.available ? (
+      {startup.available && !privateWorkspace ? (
         <SettingsCard>
           {startup.snapshot.supported ? (
             <>
@@ -224,6 +227,7 @@ export function GeneralSettingsPage({
           </div>
         </SettingsCard>
       ) : null}
+      {ENABLE_BROWSER_CONNECTOR ? (
       <SettingsCard>
         <div className="app-settings-row app-settings-row-stack">
           <div className="app-settings-row-copy">
@@ -250,6 +254,7 @@ export function GeneralSettingsPage({
           </p>
         </div>
       </SettingsCard>
+      ) : <SettingsCard><strong>{t("settings.browserExtensionTitle")}</strong><p>Unavailable in this preview while secure pairing is being added.</p></SettingsCard>}
     </>
   );
 }

@@ -1,5 +1,8 @@
+import { preparePrivateProfile, activatePrivateProfileEnvironment, PRIVATE_LIBRARY_NAME, assertPrivateCommand } from '../shared/private-runtime-policy';
+import { VaultClient } from './vault-client';
+import { VAULT_CHANNEL, vaultRequestSchema, type VaultStatus } from '../shared/vault';
 import path from "node:path";
-import { APP_ID, APP_NAME, ENABLE_BROWSER_CONNECTOR, ENABLE_UPSTREAM_UPDATES } from '../shared/brand';
+import { APP_ID, APP_NAME, ENABLE_ENCRYPTED_LIBRARIES, ENABLE_BROWSER_CONNECTOR, ENABLE_UPSTREAM_UPDATES } from '../shared/brand';
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -28,6 +31,8 @@ import {
   shell,
   nativeImage,
   utilityProcess,
+  powerMonitor,
+  session,
 } from "electron";
 import type { MessageBoxOptions, NativeImage } from "electron";
 
@@ -551,6 +556,11 @@ import {
 
 // Give this fork its own preferences and library history before taking the instance lock.
 app.setName(APP_NAME);
+const previewProfile = process.env.GEN_LIBRARY_PROFILE_DIR;
+if (previewProfile && path.isAbsolute(previewProfile) && process.env.GEN_LIBRARY_PRIVATE_WORKSPACE !== '1') {
+  mkdirSync(previewProfile, { recursive: true, mode: 0o700 }); app.setPath('userData', previewProfile);
+}
+const vaultFeatureEnabled = ENABLE_ENCRYPTED_LIBRARIES || process.env.GEN_LIBRARY_ENABLE_VAULT_PREVIEW === '1';
 
 // Headless E2E hosts may expose no hardware WebGL implementation. Opt those
 // tests into Chromium's explicitly acknowledged software path; production
@@ -600,6 +610,19 @@ if (allowMultiInstance && process.env.SERPENT_E2E !== "1") {
     path.join(app.getPath("userData"), "dev-instances", `pid-${process.pid}`),
   );
 }
+
+const privateWorkspace = preparePrivateProfile(process.argv);
+if (privateWorkspace) {
+  activatePrivateProfileEnvironment(privateWorkspace);
+  app.setPath('userData', privateWorkspace.profile);
+  app.setPath('sessionData', privateWorkspace.profile);
+  app.setPath('temp', privateWorkspace.temp);
+  app.setPath('crashDumps', privateWorkspace.crashes);
+}
+let vaultClient: VaultClient | undefined;
+let privateLibraryPath: string | null = null;
+let vaultQuitReady = false;
+let vaultQuitting = false;
 
 // Before app.ready: stream privilege is required for seekable <video>/<audio>
 // over serpent:// Range responses (Serpent-jh2).
@@ -1733,6 +1756,7 @@ function deleteAiConnectionProfile(profileId: string): void {
 }
 
 function getDecryptedApiKey(): string {
+  if (privateWorkspace) throw new Error("Cloud AI is disabled in private workspaces.");
   const activeProfileId = loadAiConfig().activeProfileId;
   return resolveAiCredential(
     activeProfileId,
@@ -1762,6 +1786,7 @@ function hasCompletedAiProfileMigration(): boolean {
 }
 
 function getDecryptedProfileApiKey(profileId: string): string {
+  if (privateWorkspace) throw new Error("Cloud AI is disabled in private workspaces.");
   try {
     if (!readAiProfileCatalog().profiles.some((profile) => profile.id === profileId)) {
       throw new Error("AI profile does not exist.");
@@ -2277,6 +2302,7 @@ async function createMainWindow(): Promise<void> {
     ...(linuxRoundedCorners ? linuxRoundedWindowOptions() : {}),
     webPreferences: {
       preload: path.join(__dirname, "index.js"),
+      additionalArguments: privateWorkspace ? ['--gen-library-private-workspace'] : [],
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
@@ -2284,6 +2310,10 @@ async function createMainWindow(): Promise<void> {
   });
 
   mainWindow = window;
+  if (privateWorkspace) {
+    window.setTitle(`${APP_NAME} — Private library`);
+    window.webContents.on('page-title-updated', (event) => { event.preventDefault(); window.setTitle(`${APP_NAME} — Private library`); });
+  }
   if (linuxRoundedCorners) attachLinuxRoundedCorners(window);
   const mainContentsId = window.webContents.id;
   // Keep renderer diagnostics active in both development and packaged builds.
@@ -3031,7 +3061,7 @@ async function enqueueAutoAnalyzeAfterImport(
 ): Promise<void> {
   try {
     const config = loadAiConfig();
-    if (!config.autoAnalyzeEnabled || !config.hasKey || !config.apiFormat) return;
+    if (privateWorkspace || !config.autoAnalyzeEnabled || !config.hasKey || !config.apiFormat) return;
     if ((importedAssetIds.length === 0 && !folderId) || !workerClient) return;
 
     const result = await workerClient.request({
@@ -3054,6 +3084,7 @@ async function enqueueAutoAnalyzeAfterImport(
 }
 
 async function processAiQueue(libraryId: string): Promise<void> {
+  if (privateWorkspace) return;
   try {
     const config = loadAiConfig();
     aiQueueScheduler.setRetryPolicy(config.reliabilitySettings);
@@ -3645,6 +3676,10 @@ async function handleLibraryRequest(
   };
   try {
     const request = parseRendererRequest(input);
+    if (privateWorkspace) {
+      try { assertPrivateCommand(request); }
+      catch { return { ok: false, error: createPublicError('PRIVATE_WORKSPACE_RESTRICTED') }; }
+    }
     if (request.type === "browse.session.open.request" && request.navigationId) {
       navigationTrace = {
         navigationId: request.navigationId,
@@ -4726,7 +4761,11 @@ async function startApplication(): Promise<void> {
   }
   // Isolated E2E runs must not write the log into the real user profile
   // (~/Library/Logs/Serpent); pin it under the temp userData instead.
-  if (process.env.SERPENT_E2E === "1" && process.env.SERPENT_E2E_USER_DATA_PATH) {
+  if (privateWorkspace) {
+    app.setAppLogsPath(privateWorkspace.logs);
+  } else if (previewProfile) {
+    app.setAppLogsPath(path.join(previewProfile, 'logs'));
+  } else if (process.env.SERPENT_E2E === "1" && process.env.SERPENT_E2E_USER_DATA_PATH) {
     app.setAppLogsPath(path.join(process.env.SERPENT_E2E_USER_DATA_PATH, "logs"));
   } else {
     app.setAppLogsPath();
@@ -4855,6 +4894,58 @@ async function startApplication(): Promise<void> {
     },
   );
   await workerClient.start();
+  if (privateWorkspace) {
+    privateLibraryPath = path.join(privateWorkspace.root, PRIVATE_LIBRARY_NAME);
+    const result = await workerClient.request(existsSync(path.join(privateLibraryPath, '.serpent', 'library.db'))
+      ? { type: 'library.open', selectedLibraryPath: privateLibraryPath }
+      : { type: 'library.create', displayName: PRIVATE_LIBRARY_NAME, selectedParentPath: privateWorkspace.root });
+    if (!result.ok || result.type !== 'library.opened') throw new Error('The private library could not be opened. Close this workspace and lock the vault.');
+    rememberOpenedLibrary(result.library.libraryPath, result.library.displayName, result.library.libraryId);
+    session.defaultSession.webRequest.onBeforeRequest({ urls: ['http://*/*','https://*/*','ws://*/*','wss://*/*'] }, (_details, callback) => callback({ cancel: true }));
+    const closePrivate = () => { for (const window of BrowserWindow.getAllWindows()) window.hide(); app.quit(); };
+    process.on('SIGUSR2', closePrivate);
+    powerMonitor.on('lock-screen', closePrivate); powerMonitor.on('suspend', closePrivate);
+    if (powerMonitor.getSystemIdleState(1) === 'locked') closePrivate();
+    const controllerPid = Number(process.env.GEN_LIBRARY_VAULT_SUPERVISOR_PID);
+    if (Number.isSafeInteger(controllerPid) && controllerPid > 1) {
+      const heartbeat = setInterval(() => { try { process.kill(controllerPid, 0); } catch { closePrivate(); } }, 1000);
+      heartbeat.unref();
+    }
+  } else if (process.platform === 'darwin' && vaultFeatureEnabled) {
+    vaultClient = new VaultClient(path.join(__dirname, 'vault_supervisor.js'), { userData: app.getPath('userData'), executable: process.execPath, appPath: app.getAppPath(), packaged: app.isPackaged });
+    const lockVaults = () => { void vaultClient?.lockAll().catch(() => dialog.showErrorBox('A vault remains unlocked', 'Close files using the vault, then use Encrypted libraries → Lock.')); };
+    powerMonitor.on('lock-screen', lockVaults); powerMonitor.on('suspend', lockVaults);
+  }
+  ipcMain.handle(VAULT_CHANNEL, async (event, input: unknown): Promise<VaultStatus> => {
+    const snapshot = (): VaultStatus => ({ supported: process.platform === 'darwin' && (vaultFeatureEnabled || Boolean(privateWorkspace)), privateWorkspace: Boolean(privateWorkspace), privateLibraryPath, sessions: [] });
+    if (!mainWindow || event.sender !== mainWindow.webContents) return { ...snapshot(), error: 'The vault request sender is not authorized.' };
+    const parsed = vaultRequestSchema.safeParse(input);
+    if (!parsed.success) return { ...snapshot(), error: 'Check the name, size and password. New passwords need at least 12 characters.' };
+    const request = parsed.data;
+    if (privateWorkspace) {
+      if (request.operation === 'lock') setImmediate(() => { for (const window of BrowserWindow.getAllWindows()) window.hide(); app.quit(); });
+      else if (request.operation !== 'status') return { ...snapshot(), error: 'Manage vaults from the main Gen Library window.' };
+      return snapshot();
+    }
+    if (!vaultClient) return { ...snapshot(), error: 'Encrypted libraries are currently available on macOS.' };
+    try {
+      if (request.operation === 'create') {
+        const selected = await dialog.showSaveDialog(mainWindow, { title: 'Create encrypted library', defaultPath: path.join(app.getPath('home'), 'AI Projects', `${request.name}.sparsebundle`), buttonLabel: 'Create encrypted library', filters: [{ name: 'Encrypted library', extensions: ['sparsebundle'] }] });
+        if (selected.canceled || !selected.filePath) return vaultClient.request({ operation: 'status' });
+        return vaultClient.request({ ...request, image: selected.filePath });
+      }
+      if (request.operation === 'open') {
+        const selected = await dialog.showOpenDialog(mainWindow, { title: 'Unlock encrypted library', properties: ['openFile','openDirectory'], filters: [{ name: 'Encrypted library', extensions: ['sparsebundle'] }] });
+        if (selected.canceled || !selected.filePaths[0]) return vaultClient.request({ operation: 'status' });
+        return vaultClient.request({ ...request, image: selected.filePaths[0] });
+      }
+      if (request.operation === 'lock') {
+        if (!request.id) return { ...snapshot(), error: 'Choose an unlocked vault to lock.' };
+        return vaultClient.request({ operation: 'lock', id: request.id });
+      }
+      return vaultClient.request({ operation: 'status' });
+    } catch (error) { return { ...snapshot(), error: error instanceof Error ? error.message : 'The vault operation failed. Do not assume a mounted volume is locked.' }; }
+  });
   workerClient.publishShowMissingLinkedFiles(showMissingLinkedFiles);
   // Serpent-65d837: remove any `.del-*` aside roots that could not be deleted
   // during a previous session (deferred-cleanup store, backoff loop).
@@ -5775,7 +5866,9 @@ async function startApplication(): Promise<void> {
   });
   const pluginCompatibility = currentPluginCompatibilityPlatform();
   const nodeAbi = Number(process.versions.modules);
-  if (pluginCompatibility === undefined || !Number.isSafeInteger(nodeAbi) || nodeAbi <= 0) {
+  if (privateWorkspace) {
+    logger.info('plugin.platform', 'Plugins are disabled in private workspaces.');
+  } else if (pluginCompatibility === undefined || !Number.isSafeInteger(nodeAbi) || nodeAbi <= 0) {
     logger.error('plugin.platform', new Error('This platform cannot run the plugin package manager.'), {
       platform: process.platform,
       arch: process.arch,
@@ -5945,7 +6038,7 @@ async function startApplication(): Promise<void> {
   if (!automationExecutionJournal || !automationCommandGateway || !workerClient || !logger) {
     throw new Error('Embedded MCP server requires journal, gateway, worker, and logger.');
   }
-  try {
+  if (!privateWorkspace) try {
     embeddedMcpServer = new EmbeddedMcpServer({
       userDataPath: app.getPath('userData'),
       journal: automationExecutionJournal,
@@ -6088,7 +6181,7 @@ async function startApplication(): Promise<void> {
   // Serpent-bfsb 后续：自动同步调度器。打开同步资源库后自动绑定并开启
   // （见 handleLibraryRequest 的 sync.open-remote-library.request 成功分支）；
   // 本地资产变更 5 秒防抖后自动同步；轮询间隔只用于检查云端。
-  syncAutoScheduler = new SyncAutoScheduler({
+  if (!privateWorkspace) syncAutoScheduler = new SyncAutoScheduler({
     workerClient,
     deviceId: () => syncDeviceId(),
     readBindings: () => readSyncBindings() as unknown as Record<string, SyncBindingLike>,
@@ -6096,13 +6189,13 @@ async function startApplication(): Promise<void> {
     resolveCredentials: (serverId) => resolveSyncServerCredentials(serverId),
     logger,
   });
-  syncAutoScheduler.start();
+  syncAutoScheduler?.start();
 
   // Serpent-85a9b0：生产启动自动打开上次使用的资源库（记住上次打开的库与
   // 文件夹——库打开后 renderer 的 browser-session 会恢复上次浏览的文件夹）。
   // 打开失败（丢失/断开/不兼容）只记日志、回退 idle，不阻塞用户从切换器
   // 另选库；E2E 隔离重启测试由 recentLibraryAutoOpenEnabled 显式门控。
-  const recentPath = recentLibraryAutoOpenEnabled()
+  const recentPath = !privateWorkspace && recentLibraryAutoOpenEnabled()
     ? readActiveLibraryPath(recentLibraryPath(), (error) => {
         logger?.error("recent-library.read", error);
       })
@@ -6658,6 +6751,7 @@ async function startApplication(): Promise<void> {
   });
 
   ipcMain.on(ASSET_NATIVE_DRAG_CHANNEL, (event, input: unknown) => {
+    if (privateWorkspace) return;
     const dragWindow = mainWindow;
     if (
       !dragWindow ||
@@ -6717,7 +6811,7 @@ async function startApplication(): Promise<void> {
 
   registerAutomationScriptIpc({
     ipcMain,
-    isAuthorizedSender: (sender) => Boolean(mainWindow && sender === mainWindow.webContents),
+    isAuthorizedSender: (sender) => Boolean(!privateWorkspace && mainWindow && sender === mainWindow.webContents),
     workerClient: () => workerClient,
     journal: () => automationExecutionJournal,
     gateway: () => automationCommandGateway,
@@ -6857,7 +6951,7 @@ async function startApplication(): Promise<void> {
       logger,
     });
   ipcMain.handle(PLUGIN_MANAGER_CHANNEL, (event, input: unknown) => {
-    if (!mainWindow || event.sender !== mainWindow.webContents || pluginPackageRequest === undefined) {
+    if (privateWorkspace || !mainWindow || event.sender !== mainWindow.webContents || pluginPackageRequest === undefined) {
       logger?.info('plugin.ipc', 'Rejected plugin manager request.', {
         reason: pluginPackageRequest === undefined ? 'unavailable' : 'unauthorized-sender',
       });
@@ -6867,6 +6961,7 @@ async function startApplication(): Promise<void> {
   });
 
   ipcMain.handle(STARTUP_PREFERENCES_GET_CHANNEL, (event): StartupPreferencesSnapshot => {
+    if (privateWorkspace) return { openAtLogin: false, supported: false, approvalRequired: false };
     if (!mainWindow || event.sender !== mainWindow.webContents) {
       return readStartupPreferencesSnapshot();
     }
@@ -6927,6 +7022,7 @@ async function startApplication(): Promise<void> {
   );
 
   ipcMain.handle(STARTUP_PREFERENCES_SET_CHANNEL, (event, input: unknown): StartupPreferencesSnapshot => {
+    if (privateWorkspace) return { openAtLogin: false, supported: false, approvalRequired: false };
     if (!mainWindow || event.sender !== mainWindow.webContents) {
       logger?.info("ipc.startup-preferences", "Rejected startup preference update.", {
         code: "unauthorized-sender",
@@ -7004,6 +7100,7 @@ async function startApplication(): Promise<void> {
         });
         return { ok: false, code: "unauthorized_sender" };
       }
+      if (privateWorkspace) return { ok: false, code: "shell_failure" };
       const resolved = resolveOpenExternalUrlTarget(input);
       if (!resolved.ok) {
         logger?.info("ipc.open-external-url", "Rejected open-external-url request.", {
@@ -7025,6 +7122,7 @@ async function startApplication(): Promise<void> {
   ipcMain.handle(
     REVEAL_APP_LOG_CHANNEL,
     (event): RevealAppLogResult => {
+      if (privateWorkspace) return { ok: false, code: "shell_failure" };
       if (!mainWindow || event.sender !== mainWindow.webContents) {
         logger?.info("ipc.reveal-app-log", "Rejected reveal-app-log request.", {
           code: "unauthorized_sender",
@@ -7283,7 +7381,7 @@ async function startApplication(): Promise<void> {
   });
 
   const startupPreferences = readStartupPreferences(startupPreferencesPath());
-  if (startupPreferences.openAtLogin) {
+  if (!privateWorkspace && startupPreferences.openAtLogin) {
     try {
       applyStartupLoginItem({
         platform: process.platform,
@@ -7379,7 +7477,7 @@ if (!hasSingleInstanceLock) {
   });
 
   app.on("window-all-closed", () => {
-    if (process.platform !== "darwin") app.quit();
+    if (privateWorkspace || process.platform !== "darwin") app.quit();
   });
 
   app.on("will-quit", () => {
@@ -7397,6 +7495,16 @@ if (!hasSingleInstanceLock) {
   });
 
   app.on("before-quit", (event) => {
+    if (vaultClient && !vaultQuitReady) {
+      event.preventDefault();
+      if (!vaultQuitting) {
+        vaultQuitting = true;
+        void vaultClient.lockAll().then(() => { vaultQuitReady = true; app.quit(); }).catch((error: unknown) => {
+          vaultQuitting = false; dialog.showErrorBox('A vault remains unlocked', error instanceof Error ? error.message : 'Close files using the vault and retry Lock.');
+        });
+      }
+      return;
+    }
     applicationQuitting = true;
     aiQueueScheduler.clearAll();
     criticalConfirmationWindowManager?.dispose();

@@ -217,6 +217,7 @@ describe.skipIf(process.platform === 'win32')('media binary release gate', () =>
         'plugin_standard_host.js',
         'plugin_trusted_host.js',
         'script_runtime_utility.js',
+        'vault_supervisor.js',
       ]) {
         writeFixtureFile(path.join(asarSource, utility), '// packaged utility fixture\n');
       }

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const PUBLIC_ERROR_MESSAGES = {
   CANCELLED: 'The request was cancelled.',
+  PRIVATE_WORKSPACE_RESTRICTED: 'This feature is disabled in a private workspace. Cloud AI, sync, plugins, linked sources and external sharing are unavailable.',
   INTERNAL_ERROR:
     'Serpent hit an unexpected error and could not finish. Open Diagnostics in the app to inspect this session’s log, then retry. If you were opening a library, copy the whole library folder onto a local disk and open it from there.',
   INVALID_LIBRARY_NAME: 'Choose a library name that is safe on macOS and Windows.',

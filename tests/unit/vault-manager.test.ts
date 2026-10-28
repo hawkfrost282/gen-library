@@ -54,6 +54,37 @@ describe('encrypted-library lifecycle', () => {
     await expect(f.manager.open(alias, 'synthetic-password')).rejects.toThrow('already unlocked');
     expect(f.spawn).toHaveBeenCalledOnce(); await f.manager.lockAll();
   });
+  it('only enlarges locked encrypted vaults and keeps the password outside arguments', async () => {
+    const f = fixture(); const image = path.join(f.root, 'Capacity.sparsebundle'); mkdirSync(image);
+    f.run.mockResolvedValueOnce('53248 2097072 18014398509481903');
+    await f.manager.expand(image, 'synthetic-resize-password', 2);
+    expect(f.run.mock.calls.map((call) => call[0])).toEqual([
+      ['resize', '-limits', '-stdinpass', image], ['resize', '-size', '2g', '-stdinpass', image],
+    ]);
+    expect(JSON.stringify(f.run.mock.calls.map((call) => call[0]))).not.toContain('synthetic-resize-password');
+    expect(f.spawn).not.toHaveBeenCalled();
+  });
+  it('refuses same-size or smaller capacities before changing the disk image', async () => {
+    const f = fixture(); const image = path.join(f.root, 'Capacity.sparsebundle'); mkdirSync(image);
+    f.run.mockResolvedValue('53248 4194224 18014398509481903');
+    await expect(f.manager.expand(image, 'synthetic-resize-password', 1)).rejects.toThrow('only be enlarged');
+    await expect(f.manager.expand(image, 'synthetic-resize-password', 2)).rejects.toThrow('only be enlarged');
+    expect(f.run.mock.calls.every((call) => call[0].includes('-limits'))).toBe(true);
+  });
+  it('rejects a mounted vault without passing its password to a utility', async () => {
+    const f = fixture(); const image = path.join(f.root, 'Capacity.sparsebundle'); mkdirSync(image);
+    f.info.mockResolvedValue({ images: [{ 'image-path': image }], encrypted: true });
+    await expect(f.manager.expand(image, 'synthetic-resize-password', 2)).rejects.toThrow('Unmount');
+    expect(f.run).not.toHaveBeenCalled();
+  });
+  it('does not resize when limits are invalid or password verification fails', async () => {
+    const f = fixture(); const image = path.join(f.root, 'Capacity.sparsebundle'); mkdirSync(image);
+    f.run.mockResolvedValueOnce('unexpected output');
+    await expect(f.manager.expand(image, 'synthetic-resize-password', 2)).rejects.toThrow('not changed');
+    f.run.mockRejectedValueOnce(new Error('The vault password was not accepted.'));
+    await expect(f.manager.expand(image, 'synthetic-resize-password', 2)).rejects.toThrow('password');
+    expect(f.run.mock.calls.every((call) => call[0].includes('-limits'))).toBe(true);
+  });
   it('recovers a mounted volume from the journal and never claims it is locked when detach fails', async () => {
     const f = fixture(); const id = '744d0d74-9b6b-4f3f-95c2-b7d6af7b8000'; const mount = path.join(f.root, 'vault-mounts', id, 'v'); mkdirSync(mount, { recursive: true });
     writeFileSync(path.join(f.root, 'vault-sessions.json'), JSON.stringify([{ id, name: 'Recovered', image: path.join(f.root, 'vault.sparsebundle'), mount }]));

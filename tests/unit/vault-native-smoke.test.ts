@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, it } from 'vitest';
 import { VaultManager, runDiskImage } from '../../src/main/vault-manager';
@@ -26,8 +26,12 @@ it.skipIf(process.env.GEN_LIBRARY_VAULT_DISK_TEST !== '1' || process.platform !=
     await manager.lockAll(); expect(existsSync(privateFile)).toBe(false);
     expect(readFileSync(path.join(root, 'controller/vault-sessions.json'), 'utf8')).not.toContain(payload);
     await expect(manager.open(image, 'incorrect-synthetic-password')).rejects.toThrow(); expect(manager.active).toBe(false);
+    await expect(manager.expand(image, 'incorrect-synthetic-password', 2)).rejects.toThrow();
+    await manager.expand(image, password, 2);
+    await expect(manager.expand(image, password, 1)).rejects.toThrow('only be enlarged');
     await manager.open(image, password); const reopened = [...manager.sessions.values()][0]!;
     expect(readFileSync(path.join(reopened.mount, '.gen-library-profile/privacy-fixture.txt'), 'utf8')).toBe(payload);
+    const capacity = statfsSync(reopened.mount); expect(capacity.bsize * capacity.blocks).toBeGreaterThan(1.5 * 1024 ** 3);
     await manager.lockAll(); expect(manager.active).toBe(false);
   } finally { await manager.lockAll(); rmSync(root, { recursive: true, force: true }); }
 }, 120_000);

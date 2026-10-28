@@ -98,6 +98,26 @@ export class VaultManager {
     await this.runDisk(['create','-size',`${sizeGiB}g`,'-fs','APFS','-type','SPARSEBUNDLE','-encryption','AES-256','-stdinpass','-nospotlight','-volname','Gen Library Private',image], password);
     await this.open(image, password, name, true);
   }
+  async expand(image: string, password: string, sizeGiB: number): Promise<void> {
+    if (!path.isAbsolute(image) || !image.toLowerCase().endsWith('.sparsebundle')) throw new Error('Choose a Gen Library encrypted sparse bundle.');
+    if (!Number.isSafeInteger(sizeGiB) || sizeGiB < 1 || sizeGiB > 16384) throw new Error('Choose a capacity between 1 and 16384 GB.');
+    image = realpathSync(image);
+    if ([...this.sessions.values()].some((session) => session.image === image)) throw new Error('Lock the vault before increasing its capacity.');
+    const attached = await this.info(['info']);
+    for (const item of Array.isArray(attached.images) ? attached.images : []) {
+      const mountedImage = (item as Record<string, unknown>)['image-path'];
+      if (typeof mountedImage === 'string' && (() => { try { return realpathSync(mountedImage) === image; } catch { return path.resolve(mountedImage) === image; } })()) throw new Error('Unmount the vault before increasing its capacity.');
+    }
+    if ((await this.info(['isencrypted', image])).encrypted !== true) throw new Error('This disk image is not encrypted.');
+    const bounds = (await this.runDisk(['resize', '-limits', '-stdinpass', image], password)).trim().split(/\s+/u);
+    if (bounds.length !== 3 || bounds.some((value) => !/^\d+$/u.test(value))) throw new Error('macOS did not return valid vault capacity limits. The vault was not changed.');
+    const current = BigInt(bounds[1]!); const maximum = BigInt(bounds[2]!);
+    const gib = 1024n ** 3n; const requestedSectors = BigInt(sizeGiB) * gib / 512n;
+    const currentCeilingGiB = (current * 512n + gib - 1n) / gib;
+    if (BigInt(sizeGiB) <= currentCeilingGiB) throw new Error(`Choose more than the current ${currentCeilingGiB} GB capacity. Vaults can only be enlarged here.`);
+    if (requestedSectors > maximum) throw new Error('The requested capacity exceeds the format limit. The vault was not changed.');
+    await this.runDisk(['resize', '-size', `${sizeGiB}g`, '-stdinpass', image], password);
+  }
   async open(image: string, password: string, name = path.basename(image, '.sparsebundle'), initialize = false): Promise<void> {
     if (this.sessions.size >= 100) throw new Error('Lock another vault before opening more.');
     if (!path.isAbsolute(image) || !image.toLowerCase().endsWith('.sparsebundle')) throw new Error('Choose a Gen Library encrypted sparse bundle.');

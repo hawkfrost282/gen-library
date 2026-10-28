@@ -14,6 +14,10 @@ Passwords should travel over a pipe to macOS disk utilities, not command-line ar
 
 The integrated preview has native synthetic tests for encryption, wrong passwords, reopening, parent disconnection, controller crashes, recovery, and refusing plaintext recreation after an unexpected unmount. Private-window import, embedded generation details, ratings, favorites, and Lock & close have also been exercised. An actual screen-lock event closed and unmounted the test workspace. See [the usage and limits](ENCRYPTED_LIBRARIES.md). Broad sleep/resume, power-loss and external-drive testing, plus independent security review, remain outstanding. Existing originals must not be silently moved, deleted, or claimed to be protected merely because a copy was imported into a vault.
 
+## Optional NSFW routing
+
+Planned; not enabled or implemented in this preview. An explicit rule should match selected tags by name and route into a user-selected vault. It needs a clear copy/move choice, unlock handling, verified transfers, metadata preservation, and cleanup of ordinary-library image/thumbnail files before reporting a successful move. See [the routing design](NSFW_ROUTING_PLAN.md).
+
 ## Metadata and organization
 
 - Expand generator fixtures, especially custom ComfyUI nodes, multi-stage workflows and Draw Things variations. Display uncertainty rather than infer a missing prompt or model.

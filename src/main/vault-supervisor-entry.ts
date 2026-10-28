@@ -43,6 +43,10 @@ process.on('message', (message: unknown) => {
       const request = vaultCommandSchema.parse(command);
       if (request.operation === 'create') await manager.create(request.image, request.name, request.password, request.sizeGiB);
       if (request.operation === 'open') await manager.open(request.image, request.password);
+      if (request.operation === 'expand') {
+        await manager.expand(request.image, request.password, request.sizeGiB);
+        send(id, { ...manager.snapshot(), notice: 'The capacity ceiling was increased. The vault still uses only the space its contents need.' }); return;
+      }
       if (request.operation === 'lock') await manager.lock(request.id);
       if (request.operation === 'lock-all') await manager.lockAll();
       send(id, manager.snapshot());

@@ -19774,3 +19774,8 @@ body.platform-darwin .app-shell[data-shell-layout="islands"] .toolbar-nav-cluste
 .toolbar-workspace-leading .vault-entry { flex-shrink: 0; white-space: nowrap; }
 
 .vault-entry, .vault-private-status { -webkit-app-region: no-drag; }
+
+.vault-capacity-settings { margin: 16px 0; }
+.vault-capacity-settings summary { cursor: pointer; font-weight: 600; }
+.vault-capacity-settings label { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
+.vault-capacity-settings input { width: 110px; padding: 8px; border: 1px solid var(--divider); border-radius: calc(6px * var(--ui-radius-scale, 1)); color: var(--text); background: var(--pane); }

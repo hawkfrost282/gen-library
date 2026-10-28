@@ -5,10 +5,12 @@ This is an early Gen Library feature, validated with synthetic images. Use a dis
 ## Use a vault
 
 1. Open **Vaults** in the toolbar, or **Encrypted libraries** on the first-launch screen.
-2. To create one, choose a name, maximum size, and a password of at least 12 characters. Repeat the password, choose **Create encrypted library…**, and select where to save the `.sparsebundle` container. It grows as needed toward the selected limit.
+2. To create one, choose a name and a password of at least 12 characters. The capacity ceiling is optional under **Advanced** and defaults to 50 GB; it does not reserve 50 GB of disk space. Repeat the password, choose **Create encrypted library…**, and select where to save the `.sparsebundle` container. Disk usage grows as files are added.
 3. To reopen it, enter its password, choose **Unlock existing…**, and select its `.sparsebundle` container.
 4. The separate window is labeled **Private library** and **Private · offline**. Import images there to copy them into encrypted storage. Embedded prompts, model and LoRA information remain available locally; tags, ratings and favorites work normally.
 5. Choose **Lock & close** in that window, or **Lock** next to the unlocked vault in the main app. The private workspace closes, finishes its shutdown, and the storage unmounts. A busy volume remains listed as unlocked; close files using it and retry. The app never force-unmounts it.
+
+To raise an existing vault’s ceiling, lock it first. Enter its password in the vault dialog, open **Advanced · capacity ceiling**, set a higher number, and choose **Increase existing vault capacity…**. Select the existing container. This preserves its contents and does not reserve the whole new amount. The app refuses equal or lower ceilings and mounted vaults.
 
 The same vault cannot open twice through two aliases in one controller. A separate background controller handles locking after the main application closes unexpectedly. On restart it checks its journal for unlocked volumes and attempts to secure them. A disk-operation timeout or failed status check is an error, never proof that a volume locked.
 
@@ -32,7 +34,7 @@ Private mode requests a close and lock on screen lock or sleep. Sleep can interr
 - While unlocked, the signed-in account and software running with its access can read the mounted files. This does not isolate an unlocked vault from malicious software on that account.
 - Text explicitly copied to the clipboard, screenshots, screen recordings, exported copies and system-level traces are outside the vault's protection. This is not a forensic-erasure guarantee.
 - Keep independent backups of the locked container. Losing the password or damaging its bands can make the library unrecoverable. Do not edit the `.sparsebundle` bands manually or operate directly on a live catalog with another app.
-- Validation covers synthetic encryption/locking, wrong passwords, reopening, controller failures and recovery, loss of a mount, private imports, local metadata and ratings. Broad sleep/resume, power-loss and removable-drive scenarios and an independent security review remain future work. Other operating systems are unsupported for this feature.
+- Validation covers synthetic encryption/locking, wrong passwords, enlargement without data loss, rejecting shrink attempts, reopening, controller failures and recovery, loss of a mount, private imports, local metadata and ratings. Broad sleep/resume, power-loss and removable-drive scenarios and an independent security review remain future work. Other operating systems are unsupported for this feature.
 
 ## Developer checks
 

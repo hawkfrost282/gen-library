@@ -52,6 +52,8 @@ setInterval(() => { try { process.kill(Number(process.env.GEN_LIBRARY_VAULT_SUPE
     expect(existsSync(path.join(firstMount, 'synthetic-private.txt'))).toBe(false);
 
     child = createController(); expect((await initialize(child)).sessions).toHaveLength(0);
+    const enlarged = await request(child, { operation: 'expand', image, password, sizeGiB: 2 });
+    expect(enlarged.error).toBeUndefined(); expect(enlarged.notice).toContain('increased'); expect(enlarged.sessions).toHaveLength(0);
     state = await request(child, { operation: 'open', image, password }); expect(state.error).toBeUndefined();
     journal = JSON.parse(readFileSync(path.join(root, 'controller/vault-sessions.json'), 'utf8')) as { mount: string }[];
     const recoveredMount = journal[0]!.mount;

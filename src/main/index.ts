@@ -4934,8 +4934,8 @@ async function startApplication(): Promise<void> {
         if (selected.canceled || !selected.filePath) return vaultClient.request({ operation: 'status' });
         return vaultClient.request({ ...request, image: selected.filePath });
       }
-      if (request.operation === 'open') {
-        const selected = await dialog.showOpenDialog(mainWindow, { title: 'Unlock encrypted library', properties: ['openFile','openDirectory'], filters: [{ name: 'Encrypted library', extensions: ['sparsebundle'] }] });
+      if (request.operation === 'open' || request.operation === 'expand') {
+        const selected = await dialog.showOpenDialog(mainWindow, { title: request.operation === 'expand' ? 'Increase vault capacity' : 'Unlock encrypted library', properties: ['openFile','openDirectory'], filters: [{ name: 'Encrypted library', extensions: ['sparsebundle'] }] });
         if (selected.canceled || !selected.filePaths[0]) return vaultClient.request({ operation: 'status' });
         return vaultClient.request({ ...request, image: selected.filePaths[0] });
       }

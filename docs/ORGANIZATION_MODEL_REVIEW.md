@@ -1,4 +1,4 @@
-# Organization model review — Gen Library personal.6
+# Organization model review — Gen Library personal.7
 
 The design now treats physical storage, descriptive metadata and Smart Folder membership as separate concerns. No existing user collection is reorganized by installing this preview.
 

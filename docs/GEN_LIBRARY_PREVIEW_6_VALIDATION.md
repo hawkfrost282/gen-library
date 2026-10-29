@@ -16,6 +16,6 @@ Standard imports already copy files into the Library's ordinary `Assets/` tree. 
 - Private-workspace policy checks: 5 passed.
 - Type checking passed. Targeted lint: zero errors, two existing App.tsx hook warnings.
 - Production packaging, runtime verification and local signature verification passed.
-- Final interactive verification remains pending because the computer-control tool confirmed the Mac was locked. No user image collection was imported, moved or altered.
+- After the Mac was unlocked, both Finder buttons were checked in the packaged app. Library files in Finder opened the actual Assets directory; Reveal in Finder selected the actual managed image in its physical subfolder. The controls fit the app layout without crowding the title bar. No user image collection was imported, moved or altered.
 
 See [how to access the files](MANAGED_FILES.md) and [the organization architecture](ORGANIZATION_MODEL_REVIEW.md).

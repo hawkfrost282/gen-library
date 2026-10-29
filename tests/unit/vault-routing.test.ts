@@ -112,3 +112,20 @@ it('keeps storage enabled while returning files and disables routing only after 
   f.routing.startDisable(); f.routing.finishDisable(); expect(f.routing.snapshot().config.vaultState).toBe('disabled'); expect(f.routing.snapshot().config.enabled).toBe(false);
   f.routing.reenableStorage(); expect(f.routing.snapshot().config.vaultState).toBe('enabled'); expect(f.routing.configure(true, false)).toBe(false); expect(f.routing.snapshot().needsExistingChoice).toBe(true);
 });
+
+it('refreshes reviewed destinations when character organization changes, restoring the physical source folder when off', async () => {
+  const f = fixture(); const actual = f.worker.getMockImplementation()!;
+  f.worker.mockImplementation(async (command) => command.type === 'asset.list'
+    ? { ok: true, type: 'asset.list', assets: [{ assetId: 'asset', displayName: 'Synthetic image', relativeFilePath: 'Manual layout/image.png' }] } as WorkerResult
+    : actual(command));
+  f.routing.configure(true, false, { autoCharacterFolders: false });
+  await f.routing.enqueue('library', ['asset']);
+  expect(f.routing.snapshot().pending[0]?.folder).toBe('Manual layout');
+  f.routing.configure(true, false, { autoCharacterFolders: true });
+  await f.routing.refreshPendingFolders();
+  expect(f.routing.snapshot().pending[0]?.folder).toBe('Momo');
+  f.routing.configure(true, false, { autoCharacterFolders: false });
+  await f.routing.refreshPendingFolders();
+  expect(f.routing.snapshot().pending[0]?.folder).toBe('Manual layout');
+  expect(f.removed()).toHaveLength(0); expect(f.vault).not.toHaveBeenCalled();
+});

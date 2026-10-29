@@ -4986,6 +4986,7 @@ async function startApplication(): Promise<void> {
           if (updated.error || updated.returnResult?.error) throw new Error(updated.error ?? updated.returnResult?.error);
         }
         const applied = vaultRouting?.configure(request.enabled, request.automatic, request);
+        if (applied && request.autoCharacterFolders !== undefined && request.autoCharacterFolders !== current?.autoCharacterFolders) await vaultRouting?.refreshPendingFolders();
         if (applied && request.enabled && request.existingMatches === 'all') await vaultRouting?.moveAllExisting();
       }
       else if (request.operation === 'routing.move-selection') await vaultRouting?.enqueue(request.libraryId, request.assetIds, false, true);

@@ -21,7 +21,7 @@ Vault routing supports NSFW, Vault, NSFW OR Vault and manual-only modes. Existin
 
 ## Interface verification
 
-The new packaged preview has been built. Final interactive checks of the new organization controls remain pending: the computer-control tool confirmed that the Mac was locked and required manual unlocking. Earlier personal.4 interface checks do not constitute verification of these new controls.
+The Mac was subsequently unlocked and the packaged application's organization controls were checked using synthetic images in an isolated profile. Character organization stayed off by default; enabling it did not move existing files. Nested Smart Folder rules matched the intended image, and manual exclusion changed only view membership. A Vault-tag trigger queued a new match while its locked source stayed in place. A password-authenticated Vault entry and return preserved ratings, favorite, character/Vault tags and embedded generation details, and original manual Smart Folder exclusion survived. Storage was marked disabled only after return and locking. Re-enabling required the password and routing again asked how to handle existing matches. See the personal.7 validation report for the subsequent pending-folder display correction.
 
 No real image collection, hidden images, social accounts or paid AI APIs were used. Development fixtures and encrypted containers are synthetic and remain under the ignored project-local test directory. No user collection has been migrated or reorganized.
 

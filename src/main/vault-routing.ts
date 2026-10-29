@@ -116,6 +116,13 @@ export class VaultRouting {
     await this.moveNext();
     if (this.jobs[0] !== job) await this.automaticallyMoveNew();
   }
+  async refreshPendingFolders(): Promise<void> {
+    if (this.busy || this.storageMigration) return;
+    for (const job of this.jobs) {
+      try { await this.refresh(job); }
+      catch { job.folder = null; } // A stale path must not look like a reviewed destination.
+    }
+  }
   async refreshNext(): Promise<void> {
     const job = this.jobs[0]; if (!job || job.tags.length || this.busy) return;
     try { if (!await this.refresh(job)) { this.jobs.shift(); this.save(); } } catch { /* Reopen the source library before resuming a pending move. */ }

@@ -1,3 +1,5 @@
+import { vaultInventorySchema } from '../vault-return';
+import { organizationSettingsSchema } from '../organization';
 import { vaultSourceSchema } from '../vault-routing';
 import { z } from 'zod';
 
@@ -402,6 +404,8 @@ export function parseProgressEvent(input: unknown): ProgressEvent {
 }
 
 export const assetChangeEventSchema = z.strictObject({
+  applyStoragePolicies: z.boolean().optional(),
+  tagChanges: z.array(z.strictObject({ assetId: nonBlankString, addedTagIds: z.array(nonBlankString), removedTagIds: z.array(nonBlankString) })).optional(),
   type: z.literal('asset.changed'),
   libraryId: nonBlankString,
   changedCount: z.number().int().positive(),
@@ -1767,6 +1771,8 @@ const assetOperationSuccessSchemas = [
 ] as const;
 
 const workerSuccessResultSchema = z.discriminatedUnion('type', [
+  z.strictObject({ ok: z.literal(true), type: z.literal('vault.return.inventory'), inventory: vaultInventorySchema }),
+  z.strictObject({ ok: z.literal(true), type: z.literal('organization.settings'), settings: organizationSettingsSchema, movedCount: z.number().int().nonnegative().optional(), skippedCount: z.number().int().nonnegative().optional() }),
   z.strictObject({
     ok: z.literal(true),
     type: z.literal('asset.relink-batch.preview'),

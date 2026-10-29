@@ -1,5 +1,6 @@
 import { contextBridge } from 'electron';
 
+import { organization } from './bridge/organization';
 import { vault } from './bridge/vault';
 import { appUpdate } from './bridge/app-update';
 import { automation } from './bridge/automation';
@@ -61,6 +62,7 @@ contextBridge.exposeInMainWorld(
   Object.freeze({
     library,
     vault,
+    organization,
     shell,
     shortcuts,
     startup,

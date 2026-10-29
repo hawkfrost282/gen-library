@@ -6,6 +6,9 @@
  * typing) and Zod `SmartCollectionQueryDefinition` can share one check.
  */
 export function hasMeaningfulSmartCollectionCondition(definition: {
+  rules?: unknown;
+  includeAssetIds?: readonly string[];
+  excludeAssetIds?: readonly string[];
   search?: {
     clauses?: readonly unknown[];
     groups?: ReadonlyArray<readonly unknown[]>;
@@ -17,6 +20,9 @@ export function hasMeaningfulSmartCollectionCondition(definition: {
   const searchGroups = definition.search?.groups ?? [];
   const filters = definition.filters ?? [];
   return (
+    definition.rules !== undefined ||
+    (definition.includeAssetIds?.length ?? 0) > 0 ||
+    (definition.excludeAssetIds?.length ?? 0) > 0 ||
     searchClauses.length > 0 ||
     searchGroups.some((group) => group.length > 0) ||
     filters.length > 0

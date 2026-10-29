@@ -1,3 +1,4 @@
+import { transferRpc } from './helpers/transfer-rpc';
 import { createRequire } from 'node:module';
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
@@ -9,8 +10,6 @@ import { afterEach, expect, it } from 'vitest';
 import { LibraryService } from '../../src/worker/library-service';
 import { VaultInbox } from '../../src/main/vault-inbox';
 import { atomicVaultJson, vaultDirectory } from '../../src/main/vault-transfer-io';
-import type { WorkerCommand } from '../../src/shared/protocol/requests';
-import type { WorkerResult } from '../../src/shared/protocol/responses';
 import { vaultSourceSchema } from '../../src/shared/vault-routing';
 import type { VaultReceipt } from '../../src/shared/vault-routing';
 const services: LibraryService[] = []; const roots: string[] = []; const inboxes: VaultInbox[] = [];
@@ -28,22 +27,7 @@ function fixture(privateRootOverride?: string, stage = true) {
   const assetId = imported.assets[0]!.assetId;
   source.setAssetMetadata({ libraryId: library.libraryId, assetId, expectedVersion: 0, description: 'Synthetic metadata', rating: 5, favorite: true, author: 'Synthetic author', sourcePageUrl: 'https://example.com/synthetic' });
   for (const name of ['NSFW', 'Character: Momo']) { const tag = source.createTag({ libraryId: library.libraryId, name }); source.assignTags({ libraryId: library.libraryId, assetIds: [assetId], tagIds: [tag.tagId] }); }
-  const rpc = async (command: WorkerCommand): Promise<WorkerResult> => {
-    try {
-      switch (command.type) {
-        case 'folder.list': return { ok: true, type: 'folder.list', folders: destination.listManagedFolders(command.libraryId) };
-        case 'folder.create': return { ok: true, type: 'folder.created', folder: destination.createManagedFolder(command) };
-        case 'asset.import.prepare': { const result = destination.prepareOrExecuteImport(command); if (!('assets' in result)) throw new Error('Unexpected private conflict'); return { ok: true, type: 'asset.import.completed', completion: result }; }
-        case 'asset.metadata.get': return { ok: true, type: 'asset.metadata.got', metadata: destination.getAssetMetadata(command) };
-        case 'asset.metadata.set': return { ok: true, type: 'asset.metadata.got', metadata: destination.setAssetMetadata(command) };
-        case 'tag.list': return { ok: true, type: 'tag.list', tags: destination.listTags(command.libraryId) };
-        case 'tag.create': return { ok: true, type: 'tag.created', tag: destination.createTag(command) };
-        case 'tag.assign': destination.assignTags(command); return { ok: true, type: 'library.closed', libraryId: command.libraryId };
-        case 'vault.destination.verify': destination.verifyVaultDestination(command); return { ok: true, type: 'library.closed', libraryId: command.libraryId };
-        default: throw new Error(`Unexpected command: ${command.type}`);
-      }
-    } catch { return { ok: false, error: { code: 'INVALID_STATE_TRANSITION', message: 'Synthetic verification failure' } }; }
-  };
+  const rpc = transferRpc(destination);
   const inbox = new VaultInbox(privateRoot, privateLibrary.libraryId, rpc); inbox.stop(); inboxes.push(inbox);
   const command = { type: 'vault.source.prepare' as const, libraryId: library.libraryId, assetId };
   const snapshot = vaultSourceSchema.parse(source.prepareVaultTransfer(command));

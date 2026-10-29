@@ -1,3 +1,4 @@
+import { smartFolderRuleSchema } from './smart-folder-rules';
 import { z } from 'zod';
 import { generationMetadataSchema } from './generation-metadata';
 
@@ -660,6 +661,9 @@ export const searchQuerySchema = searchQueryDefinitionSchema;
 export type SearchQuery = Exclude<z.infer<typeof searchQuerySchema>, null>;
 
 export const smartCollectionQueryDefinitionSchema = z.strictObject({
+  rules: smartFolderRuleSchema.optional(),
+  includeAssetIds: z.array(nonBlankString).max(10000).optional(),
+  excludeAssetIds: z.array(nonBlankString).max(10000).optional(),
   search: searchQueryDefinitionSchema.unwrap().optional(),
   filters: z.array(filterClauseSchema).max(16).optional(),
   sort: sortDefinitionSchema.optional(),

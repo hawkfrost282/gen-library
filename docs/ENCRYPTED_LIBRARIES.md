@@ -14,9 +14,19 @@ To raise an existing vault’s ceiling, lock it first. Enter its password in the
 
 The same vault cannot open twice through two aliases in one controller. A separate background controller handles locking after the main application closes unexpectedly. On restart it checks its journal for unlocked volumes and attempts to secure them. A disk-operation timeout or failed status check is an error, never proof that a volume locked.
 
-## Optional NSFW moves
+## Optional storage routing
 
-The vault dialog includes an off-by-default NSFW routing rule. Choose a destination vault, enable routing, and use character tags such as `Character: Momo`. It can move new manual NSFW matches automatically when their character is unambiguous and the vault is unlocked, or ask you to review each image. Existing matches require **Review existing NSFW images**. A verified move removes the managed source only after the private copy and metadata are checked; an ordinary private-window import still just copies. See [routing behavior and limits](NSFW_ROUTING_PLAN.md).
+Open **Vault storage and routing** in the vault dialog and choose a destination. Routing is off by default. Choose **NSFW tag**, **Vault tag**, **NSFW OR Vault**, or **manual only**. Enabling a trigger asks whether to queue all existing matches or apply it only to future tag assignments. Tags describe images; only this explicit storage policy requests a physical move. No image recognition or paid AI is used.
+
+Files can also be queued manually without either tag. A locked destination keeps the original pending outside encryption. With automatic moves off, review and use **Move next file** after unlocking. Vault character organization is a separate optional setting: one character uses its folder, several use Shared, and none use Unassigned. Otherwise entry preserves the original relative folder, with a per-file folder override available. Regular folders, ratings, favorites and Smart Folders also work inside the private Library.
+
+## Disable Vault and return files
+
+Pausing routing leaves encrypted files where they are. **Disable Vault** instead merges its files into the currently open normal Library. Read and confirm the warning that returned files will be outside encryption, then enter the Vault password. Authentication is required even when the Vault was already unlocked.
+
+The migration preflights supported files, copies and verifies each file and its metadata, and only then removes its protected source. It preserves tags (including NSFW and Vault), stars, favorites, embedded generation information, metadata provenance, and mapped Collection/Smart Folder memberships. It preserves folders where practical or uses the normal Library's optional character organization. Name conflicts keep both files. Only a verified empty Vault that locks successfully is marked disabled; routing is then turned off. An interrupted migration remains visible and can be resumed with the password.
+
+Re-enabling requires the password. Enabling tag routing again asks whether to move existing matches or affect only future changes. Unsupported multi-file assets, linked sources and revision histories stop preflight rather than losing data. See the [organization model and current limits](ORGANIZATION_MODEL_REVIEW.md).
 
 ## What is encrypted
 
@@ -34,7 +44,7 @@ Private mode requests a close and lock on screen lock or sleep. Sleep can interr
 
 ## Practical limits
 
-- **Importing copies the originals.** Original files, old thumbnails, backups and other copies outside the vault remain outside it. Gen Library does not silently delete or move them.
+- **Importing copies the originals.** Ordinary imports leave external originals, old thumbnails, backups and other copies outside the vault. Explicit routing moves a supported managed canonical file only after verification; it does not remove unrelated external copies.
 - While unlocked, the signed-in account and software running with its access can read the mounted files. This does not isolate an unlocked vault from malicious software on that account.
 - Text explicitly copied to the clipboard, screenshots, screen recordings, exported copies and system-level traces are outside the vault's protection. This is not a forensic-erasure guarantee.
 - Keep independent backups of the locked container. Losing the password or damaging its bands can make the library unrecoverable. Do not edit the `.sparsebundle` bands manually or operate directly on a live catalog with another app.

@@ -1,3 +1,5 @@
+import { OrganizationEntry } from './OrganizationEntry';
+import type { OrganizationApi } from '../shared/organization';
 import { VaultEntry } from './VaultEntry';
 import type { VaultApi } from '../shared/vault';
 import { LocalConfirmationHost, useLocalConfirmation, requestConfirmation } from "./local-confirmation";
@@ -718,6 +720,7 @@ type RendererWindow = Window & {
   serpent?: {
     library?: SerpentLibraryApi;
     vault?: VaultApi;
+    organization?: OrganizationApi;
     shell?: SerpentShellApi;
     appUpdate?: SerpentAppUpdateApi;
     automation?: SerpentAutomationScriptApi;
@@ -9705,7 +9708,8 @@ function AppInner() {
 
   async function updateSmartCollectionQuery(collectionId: string) {
     if (!api || !library) return;
-    const definition = currentQueryDefinition();
+    const previous = JSON.parse(smartCollections.find((item) => item.collectionId === collectionId)?.queryDefinition ?? '{}') as Record<string, unknown>;
+    const definition = { ...previous, ...currentQueryDefinition() };
     if (!hasMeaningfulSmartCollectionCondition(definition)) {
       setError(t("toast.smartCollectionNeedsCondition"));
       return;
@@ -14181,7 +14185,9 @@ function AppInner() {
         <div className="toolbar-cluster toolbar-workspace-cluster">
           <div className="toolbar-workspace-main">
             <div className="toolbar-workspace-leading">
-            <VaultEntry compact api={(window as RendererWindow).serpent?.vault} onVisibilityChange={setEncryptedDialogOpen} />
+            <OrganizationEntry key={library?.libraryId} libraryId={library?.libraryId} api={(window as RendererWindow).serpent?.organization} onVisibilityChange={setEncryptedDialogOpen} />
+            {activeSmartCollectionId ? <button className="secondary-button" type="button" onClick={() => { const folder = smartCollections.find((item) => item.collectionId === activeSmartCollectionId); if (folder) setSmartCollectionSettings({ collectionId: folder.collectionId, name: folder.name }); }}>Smart Folder rules</button> : null}
+            <VaultEntry compact libraryId={library?.libraryId} libraryName={library?.displayName} selectedAssetIds={selectedAssetIds} api={(window as RendererWindow).serpent?.vault} onVisibilityChange={setEncryptedDialogOpen} />
               <ScopeHistoryButtons
                 // Serpent-b7e173：预览已是历史条目（打开查看器必压在某浏览 scope 上），
                 // 所以后退/前进由纯历史驱动即可，无需对预览做任何特判。
@@ -16637,6 +16643,15 @@ function AppInner() {
           onSaveCurrentQuery={async (collectionId) => {
             await updateSmartCollectionQuery(collectionId);
           }}
+          definitionJson={smartCollections.find((item) => item.collectionId === smartCollectionSettings.collectionId)?.queryDefinition ?? '{}'}
+          selectedAssetIds={selectedAssetIds}
+          onSaveDefinition={async (definition) => {
+            if (!api || !library) return;
+            const result = await api.updateSmartCollection({ libraryId: library.libraryId, collectionId: smartCollectionSettings.collectionId, queryDefinitionJson: JSON.stringify(definition) });
+            if (!result.ok) throw new LibraryOperationError(result.error);
+            await reloadSmartCollections();
+            if (activeSmartCollectionId === smartCollectionSettings.collectionId) await chooseSmartCollection(smartCollectionSettings.collectionId);
+          }}
           target={smartCollectionSettings}
         />
       ) : null}
@@ -16873,7 +16888,7 @@ function AppInner() {
           );
         }}
         onRenameSmartCollection={(id, name) => setRenameTarget({ kind: "smart", id, name })}
-        onUpdateSmartCollection={(id) => { void updateSmartCollectionQuery(id); }}
+        onUpdateSmartCollection={(id) => { const folder = smartCollections.find((item) => item.collectionId === id); if (folder) setSmartCollectionSettings({ collectionId: id, name: folder.name }); }}
         onDeleteSmartCollection={(id) => { void deleteSmartCollection(id); }}
         onRenameOrganization={(id, name) => {
           cancelInlineSmartCollectionEdit();

@@ -41,6 +41,8 @@ process.on('message', (message: unknown) => {
         send(id, manager.snapshot()); return;
       }
       const request = vaultCommandSchema.parse(command);
+      if (request.operation === 'return-authenticate') { await manager.authenticateReturn(request.image, request.password); send(id, manager.snapshot()); return; }
+      if (request.operation === 'return-command') { const returnResult = await manager.returnCommand(request.image, request.command); send(id, { ...manager.snapshot(), returnResult }); return; }
       if (request.operation === 'transfer') {
         const transferReceipt = await manager.transfer(request.image, request.source, request.folder); send(id, { ...manager.snapshot(), transferReceipt }); return;
       }

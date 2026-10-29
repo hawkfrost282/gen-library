@@ -1,8 +1,9 @@
+import { vaultReturnResultSchema, type VaultReturnCommand, type VaultReturnResult } from '../shared/vault-return';
 import { createHash } from 'node:crypto';
 import { atomicVaultJson, vaultDirectory, vaultFileHash, syncVaultFile } from './vault-transfer-io';
 import { vaultReceiptSchema, type VaultSource, type VaultReceipt } from '../shared/vault-routing';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmdirSync, realpathSync, lstatSync, chmodSync, copyFileSync, rmSync, constants } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmdirSync, realpathSync, lstatSync, chmodSync, copyFileSync, rmSync, utimesSync, constants } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -164,6 +165,31 @@ export class VaultManager {
       throw error;
     }
   }
+  async authenticateReturn(image: string, password: string): Promise<void> {
+    image = realpathSync(image);
+    const active = [...this.sessions.values()].find((item) => item.image === image);
+    if (active) await this.lock(active.id);
+    // A fresh attach, after locking any existing workspace, must accept the supplied password.
+    await this.open(image, password);
+  }
+  async returnCommand(image: string, command: VaultReturnCommand): Promise<VaultReturnResult> {
+    image = realpathSync(image);
+    const session = [...this.sessions.values()].find((item) => item.image === image);
+    if (!session?.child || session.locking || session.error) throw new Error('Authenticate and unlock this Vault before returning its files.');
+    const directory = vaultDirectory(session.mount, '.vault-transfers', 'return', randomUUID());
+    atomicVaultJson(path.join(directory, 'request.json'), command);
+    const deadline = Date.now() + 120000;
+    while (Date.now() < deadline) {
+      const file = path.join(directory, 'response.json');
+      if (existsSync(file)) {
+        const result = vaultReturnResultSchema.parse(JSON.parse(readFileSync(file, 'utf8')));
+        rmSync(directory, { recursive: true }); return result;
+      }
+      if (!session.child) throw new Error('The private workspace closed. The Vault has not been disabled.');
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    throw new Error('The Vault return operation is still pending. The Vault has not been disabled.');
+  }
   async transfer(image: string, source: VaultSource, folder: string): Promise<VaultReceipt> {
     image = realpathSync(image);
     const session = [...this.sessions.values()].find((item) => item.image === image);
@@ -173,7 +199,7 @@ export class VaultManager {
     try { return await work; } finally { session.transferring = undefined; }
   }
   private async transferIntoSession(session: Session, source: VaultSource, folder: string): Promise<VaultReceipt> {
-    const digest = createHash('sha256').update(JSON.stringify({ libraryId: source.libraryId, assetId: source.assetId, revisionId: source.revisionId, sha256: source.sha256, metadataHash: source.metadataHash, folder })).digest('hex');
+    const digest = createHash('sha256').update(JSON.stringify({ libraryId: source.libraryId, assetId: source.assetId, revisionId: source.revisionId, sha256: source.sha256, metadataHash: source.metadataHash, modifiedAt: source.modifiedAt, identities: source.identities, folder })).digest('hex');
     const transferId = `${digest.slice(0,8)}-${digest.slice(8,12)}-4${digest.slice(13,16)}-8${digest.slice(17,20)}-${digest.slice(20,32)}`;
     const verificationNonce = randomUUID();
     const receipts = vaultDirectory(session.mount, '.vault-transfers', 'receipts');
@@ -186,7 +212,7 @@ export class VaultManager {
     const manifest = path.join(batch, 'manifest.json');
     if (!existsSync(manifest)) {
       const staged = path.join(vaultDirectory(batch, 'files'), source.fileName); if (existsSync(staged)) rmSync(staged);
-      copyFileSync(source.sourcePath, staged, constants.COPYFILE_EXCL); syncVaultFile(staged);
+      copyFileSync(source.sourcePath, staged, constants.COPYFILE_EXCL); if (source.modifiedAt) utimesSync(staged, new Date(source.modifiedAt), new Date(source.modifiedAt)); syncVaultFile(staged);
       if (vaultFileHash(staged) !== source.sha256) throw new Error('The source image changed during the copy. Its original has been kept.');
     }
     // A new explicit attempt may resume an interrupted import after its cause is fixed.

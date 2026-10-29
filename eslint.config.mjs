@@ -9,6 +9,8 @@ export default tseslint.config(
       '.vite/**',
       '.claude/**',
       '.worktrees/**',
+      // Local development app copies, synthetic libraries and disposable runtime fixtures.
+      '.local/**',
       '.media-build/**',
       '.tmp-*/**',
       'artifacts/**',

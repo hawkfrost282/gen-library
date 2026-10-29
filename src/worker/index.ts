@@ -2503,7 +2503,25 @@ function stopAutomaticWorkForLibrary(
 
 async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<WorkerResult> {
   switch (request.command.type) {
+    case 'vault.metadata.restore-layers': {
+      const command = request.command; const lease = await libraryService.acquireWriteLease(command.libraryId);
+      try { libraryService.restoreVaultMetadataLayers(command); return { ok: true, type: 'library.closed', libraryId: command.libraryId }; } finally { lease.release(); }
+    }
+    case 'organization.get': return { ok: true, type: 'organization.settings', settings: libraryService.getOrganizationSettings(request.command.libraryId) };
+    case 'organization.set':
+    case 'organization.apply': {
+      const command = request.command; const lease = await libraryService.acquireWriteLease(command.libraryId);
+      try {
+        if (command.type === 'organization.set') return { ok: true, type: 'organization.settings', settings: libraryService.setOrganizationSettings(command.libraryId, command.settings) };
+        const result = libraryService.organizePhysicalFiles(command);
+        return { ok: true, type: 'organization.settings', settings: libraryService.getOrganizationSettings(command.libraryId), ...result };
+      } finally { lease.release(); }
+    }
+
+    case 'vault.return.inventory': return { ok: true, type: 'vault.return.inventory', inventory: libraryService.vaultReturnInventory(request.command.libraryId) };
+    case 'vault.return.prepare':
     case 'vault.source.prepare': return { ok: true, type: 'vault.source.prepared', source: libraryService.prepareVaultTransfer(request.command) };
+    case 'vault.return.remove':
     case 'vault.source.remove': {
       const source = request.command.source; const lease = await libraryService.acquireWriteLease(source.libraryId);
       try {

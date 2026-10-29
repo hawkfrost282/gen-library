@@ -19789,3 +19789,8 @@ body.platform-darwin .app-shell[data-shell-layout="islands"] .toolbar-nav-cluste
 .vault-routing > summary { cursor: pointer; font-weight: 600; }
 .vault-routing-notes { margin-top: 16px; }
 .vault-routing-notes summary { cursor: pointer; }
+
+.smart-folder-rule { border: 1px solid var(--divider); border-radius: calc(6px * var(--ui-radius-scale, 1)); margin: 12px 0; padding: 12px; min-width: 0; }
+.smart-folder-rule-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.smart-folder-rule input, .smart-folder-rule select { padding: 7px; background: var(--pane); color: var(--text); border: 1px solid var(--divider); max-width: 100%; }
+.smart-collection-settings-dialog { max-height: calc(100vh - 64px); overflow: auto; width: min(780px, calc(100vw - 48px)); }

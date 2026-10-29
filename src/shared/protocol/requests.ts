@@ -1,4 +1,5 @@
-import { vaultSourceSchema, routedMetadataSchema } from '../vault-routing';
+import { organizationSettingsSchema } from '../organization';
+import { vaultSourceSchema, routedMetadataSchema, storageIdentitiesSchema } from '../vault-routing';
 import { z } from 'zod';
 
 import {
@@ -84,7 +85,7 @@ const assetRenameFileFieldsSchema = z.object({
 const selectedPathSchema = nonBlankString;
 const optionalIdentifierSchema = identifierSchema.optional();
 const optionalClearableDescriptionSchema = z.string().max(10000).optional();
-const queryDefinitionJsonSchema = nonBlankString.max(65_536);
+const queryDefinitionJsonSchema = nonBlankString.max(1_048_576);
 export const manualPaletteColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/u, {
   message: 'Expected a six-digit hexadecimal color such as #A1B2C3.',
 });
@@ -1509,6 +1510,13 @@ export function parseRendererRequest(input: unknown): RendererRequest {
 }
 
 export const workerCommandSchema = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.literal('vault.metadata.restore-layers'), libraryId: identifierSchema, assetId: identifierSchema, metadata: routedMetadataSchema, modifiedAt: z.string().datetime().optional(), identities: storageIdentitiesSchema.optional() }),
+  z.strictObject({ type: z.literal('vault.return.inventory'), libraryId: identifierSchema }),
+  z.strictObject({ type: z.literal('vault.return.prepare'), libraryId: identifierSchema, assetId: identifierSchema }),
+  z.strictObject({ type: z.literal('vault.return.remove'), source: vaultSourceSchema }),
+  z.strictObject({ type: z.literal('organization.get'), libraryId: identifierSchema }),
+  z.strictObject({ type: z.literal('organization.set'), libraryId: identifierSchema, settings: organizationSettingsSchema }),
+  z.strictObject({ type: z.literal('organization.apply'), libraryId: identifierSchema, assetIds: z.array(identifierSchema).max(10000).optional(), changedTagIds: z.array(identifierSchema).max(10000).optional() }),
   z.strictObject({
     type: z.literal('library.create'),
     displayName: displayNameSchema,
@@ -2006,6 +2014,7 @@ export const workerCommandSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     type: z.literal('tag.assign'),
+    applyStoragePolicies: z.boolean().optional(),
     libraryId: identifierSchema,
     assetIds: z.array(identifierSchema).min(1),
     tagIds: z.array(identifierSchema).min(1),

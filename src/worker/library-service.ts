@@ -1,4 +1,7 @@
-import { canonicalMetadata, type RoutedMetadata, type VaultSource } from '../shared/vault-routing';
+import type { VaultInventory } from '../shared/vault-return';
+import { DEFAULT_ORGANIZATION, organizationSettingsSchema, physicalCharacterFolder, type OrganizationSettings } from '../shared/organization';
+import { compileSmartFolderRule } from './smart-folder-sql';
+import { storageIdentitiesSchema, comparableMetadata, canonicalMetadata, type RoutedMetadata, type VaultSource } from '../shared/vault-routing';
 import { trashLinkedSource } from './trash-linked-source';
 import { randomUUID, createHash } from 'node:crypto';
 import {
@@ -5134,6 +5137,8 @@ export interface LibraryServiceDiagnostic {
 }
 
 export interface AssetsChangedEvent {
+  applyStoragePolicies?: boolean;
+  tagChanges?: Array<{ assetId: string; addedTagIds: string[]; removedTagIds: string[] }>;
   changedCount: number;
   libraryId: string;
   missingCount: number;
@@ -7136,8 +7141,8 @@ export class LibraryService {
     }
   }
 
-  private emitClientAssetsChanged(libraryId: string, changedCount: number): void {
-    this.emitAssetsChanged(libraryId, changedCount, 'client');
+  private emitClientAssetsChanged(libraryId: string, changedCount: number, tagChanges?: AssetsChangedEvent['tagChanges'], applyStoragePolicies = true): void {
+    this.emitAssetsChanged(libraryId, changedCount, 'client', tagChanges, applyStoragePolicies);
   }
 
   /**
@@ -7148,6 +7153,8 @@ export class LibraryService {
     libraryId: string,
     changedCount: number,
     source: NonNullable<AssetsChangedEvent['source']>,
+    tagChanges?: AssetsChangedEvent['tagChanges'],
+    applyStoragePolicies = true,
   ): void {
     if (changedCount <= 0) return;
     this.options.onAssetsChanged?.({
@@ -7156,6 +7163,8 @@ export class LibraryService {
       changedCount,
       missingCount: 0,
       source: this.syncReplayDepth > 0 && source === 'client' ? 'sync' : source,
+      ...(tagChanges?.length ? { tagChanges } : {}),
+      ...(!applyStoragePolicies ? { applyStoragePolicies: false } : {}),
     });
   }
 
@@ -20124,6 +20133,7 @@ export class LibraryService {
   }
 
   assignTags(input: {
+    applyStoragePolicies?: boolean;
     libraryId: string;
     assetIds: string[];
     tagIds: string[];
@@ -20146,6 +20156,7 @@ export class LibraryService {
     if (tagRows.length !== input.tagIds.length) throw new LibraryServiceError('FOLDER_NOT_FOUND');
 
     let assignedCount = 0;
+    const changes = new Map<string, string[]>();
     const insertStmt = openLibrary.connection.prepare(
       'INSERT OR IGNORE INTO human_asset_tags (asset_id, tag_id) VALUES (?, ?)',
     );
@@ -20154,13 +20165,14 @@ export class LibraryService {
         for (const tagId of input.tagIds) {
           const result = insertStmt.run(assetId, tagId);
           assignedCount += result.changes;
+          if (result.changes) changes.set(assetId, [...(changes.get(assetId) ?? []), tagId]);
         }
       }
     })();
     for (const assetId of eligibleAssetIds) {
       this.syncAssetSearchContent(openLibrary.connection, assetId);
     }
-    this.emitClientAssetsChanged(input.libraryId, assignedCount);
+    this.emitClientAssetsChanged(input.libraryId, assignedCount, [...changes].map(([assetId, addedTagIds]) => ({ assetId, addedTagIds, removedTagIds: [] })), input.applyStoragePolicies);
     return { assignedCount, skipped };
   }
 
@@ -20178,6 +20190,8 @@ export class LibraryService {
     );
     if (eligibleAssetIds.length === 0) return { removedCount: 0, skipped };
 
+    const removalTags = new Set(input.tagIds);
+    const changes = eligibleAssetIds.map((assetId) => ({ assetId, addedTagIds: [] as string[], removedTagIds: this.fetchAssetTags(openLibrary.connection, assetId).map((tag) => tag.id).filter((id) => removalTags.has(id)) })).filter((item) => item.removedTagIds.length);
     let removedCount = 0;
     const relationChunkLimit = Math.floor((SQLITE_IN_BIND_LIMIT - 4) / 2);
     for (const assetChunk of sqliteInChunks(eligibleAssetIds, relationChunkLimit)) {
@@ -20210,7 +20224,7 @@ export class LibraryService {
     for (const assetId of eligibleAssetIds) {
       if (removedCount > 0) this.syncAssetSearchContent(openLibrary.connection, assetId);
     }
-    this.emitClientAssetsChanged(input.libraryId, removedCount);
+    this.emitClientAssetsChanged(input.libraryId, removedCount, changes);
     return { removedCount, skipped };
   }
 
@@ -20961,30 +20975,144 @@ export class LibraryService {
     return { assetId: input.assetId, colorSpaceOverride: normalized };
   }
 
+  getOrganizationSettings(libraryId: string): OrganizationSettings {
+    const library = this.requireOpenLibrary(libraryId);
+    const file = path.join(library.summary.libraryPath, '.serpent', 'organization.json');
+    if (!existsSync(file)) return structuredClone(DEFAULT_ORGANIZATION);
+    if (lstatSync(file).isSymbolicLink()) throw new LibraryServiceError('INVALID_LIBRARY_PATH');
+    return organizationSettingsSchema.parse(JSON.parse(readFileSync(file, 'utf8')));
+  }
+  setOrganizationSettings(libraryId: string, settings: OrganizationSettings): OrganizationSettings {
+    const library = this.requireOpenLibrary(libraryId); this.assertLibraryWritable(library);
+    const parsed = organizationSettingsSchema.parse(settings);
+    const file = path.join(library.summary.libraryPath, '.serpent', 'organization.json');
+    const temporary = `${file}.${randomUUID()}.tmp`;
+    const fd = openSync(temporary, 'wx', 0o600);
+    try { writeFileSync(fd, JSON.stringify(parsed)); fsyncSync(fd); } finally { closeSync(fd); }
+    renameSync(temporary, file); return parsed;
+  }
+  organizePhysicalFiles(input: { libraryId: string; assetIds?: string[]; changedTagIds?: string[] }): { movedCount: number; skippedCount: number } {
+    const settings = this.getOrganizationSettings(input.libraryId);
+    if (!settings.autoCharacterFolders) return { movedCount: 0, skippedCount: 0 };
+    if (input.changedTagIds) {
+      const changed = new Set(input.changedTagIds);
+      const characterChanged = this.listTags(input.libraryId).some((tag) => changed.has(tag.tagId) && (/^character\s*:/iu.test(tag.name) || Object.keys(settings.characterFolders).some((name) => name.toLocaleLowerCase('en-US') === tag.name.toLocaleLowerCase('en-US'))));
+      if (!characterChanged) return { movedCount: 0, skippedCount: 0 };
+    }
+    const assets = this.listAssets({ libraryId: input.libraryId, ...(input.assetIds?.length ? { assetIds: input.assetIds } : {}), recursive: true });
+    let movedCount = 0; let skippedCount = 0;
+    for (const asset of assets) {
+      if (asset.locationKind !== 'managed' || asset.deletedAt || asset.availability !== 'available' || asset.sequence) { skippedCount++; continue; }
+      const tags = this.getAssetMetadata({ libraryId: input.libraryId, assetId: asset.assetId }).tags.map((tag) => tag.name);
+      const name = physicalCharacterFolder(tags, settings)!;
+      let folder = this.listManagedFolders(input.libraryId).find((candidate) => !candidate.parentFolderId && candidate.name === name);
+      folder ??= this.createManagedFolder({ libraryId: input.libraryId, name });
+      if (asset.managedFolderId === folder.folderId) continue;
+      const result = this.moveAssets({ libraryId: input.libraryId, assetIds: [asset.assetId], targetFolderId: folder.folderId, conflictStrategy: 'keep-both' });
+      movedCount += result.movedCount; skippedCount += result.skippedCount;
+    }
+    if (movedCount) this.emitClientAssetsChanged(input.libraryId, movedCount);
+    return { movedCount, skippedCount };
+  }
+
+  vaultReturnInventory(libraryId: string): VaultInventory {
+    const open = this.requireOpenLibrary(libraryId);
+    const assets = this.listAssets({ libraryId, recursive: true });
+    const total = open.connection.prepare('SELECT COUNT(*) AS count FROM assets').get() as { count: number };
+    const inventory: VaultInventory = {
+      libraryId,
+      assets: assets.map((asset) => {
+        const revisions = open.connection.prepare('SELECT COUNT(*) AS count FROM revisions WHERE asset_id = ?').get(asset.assetId) as { count: number };
+        const supported = asset.locationKind === 'managed' && asset.availability === 'available' && !asset.sequence && !asset.deletedAt && revisions.count === 1;
+        return { assetId: asset.assetId, name: asset.displayName, supported, ...(!supported ? { reason: 'Restore missing or trashed files and resolve linked files, sequences or revision history before disabling this Vault.' } : {}) };
+      }),
+      folders: this.listManagedFolders(libraryId).map(({ folderId, relativePath }) => ({ folderId, relativePath })),
+      tags: this.listTags(libraryId).map(({ tagId, name }) => ({ tagId, name })),
+      smartFolders: this.listSmartCollections(libraryId).map(({ collectionId, name, queryDefinition }) => ({ collectionId, name, queryDefinition })),
+      collections: this.listCollections(libraryId).map(({ collectionId, parentId, name, description }) => ({ collectionId, parentId, name, description, assetIds: this.listCollectionAssets({ libraryId, collectionId, recursive: false }).map((asset) => asset.assetId) })),
+    };
+    if (total.count !== assets.length) inventory.assets.push({ assetId: 'unlisted-vault-content', name: 'Vault Trash, sequence frames or hidden catalog entries', supported: false, reason: 'Restore or resolve this content before disabling the Vault. Nothing has been moved.' });
+    // Refuse companion files before moving any image, rather than discovering them halfway through.
+    for (const asset of inventory.assets) if (asset.supported) { try { this.prepareVaultTransfer({ libraryId, assetId: asset.assetId }); } catch { asset.supported = false; asset.reason = 'This file has companions or an unsupported source state. Resolve it before disabling the Vault.'; } }
+    return inventory;
+  }
+
+  private storageIdentityFile(libraryId: string, assetId: string): string {
+    const library = this.requireOpenLibrary(libraryId);
+    const directory = path.join(library.summary.libraryPath, '.serpent', 'storage-identities');
+    if (existsSync(directory)) { if (lstatSync(directory).isSymbolicLink() || !lstatSync(directory).isDirectory()) throw new LibraryServiceError('INVALID_LIBRARY_PATH'); }
+    return path.join(directory, `${createHash('sha256').update(assetId).digest('hex')}.json`);
+  }
+  private storageIdentities(libraryId: string, assetId: string): Record<string, string> {
+    const file = this.storageIdentityFile(libraryId, assetId);
+    if (!existsSync(file)) return { [libraryId]: assetId };
+    if (lstatSync(file).isSymbolicLink() || lstatSync(file).size > 65536) throw new LibraryServiceError('INVALID_LIBRARY_PATH');
+    return { ...storageIdentitiesSchema.parse(JSON.parse(readFileSync(file, 'utf8'))), [libraryId]: assetId };
+  }
+  private storeStorageIdentities(libraryId: string, assetId: string, identities: Record<string, string>): void {
+    const file = this.storageIdentityFile(libraryId, assetId); mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    const temporary = `${file}.${randomUUID()}.tmp`; const fd = openSync(temporary, 'wx', 0o600);
+    try { writeFileSync(fd, JSON.stringify({ ...identities, [libraryId]: assetId })); fsyncSync(fd); } finally { closeSync(fd); }
+    renameSync(temporary, file);
+  }
+
   private vaultMetadata(libraryId: string, assetId: string): RoutedMetadata {
     const data = this.getAssetMetadata({ libraryId, assetId });
+    const open = this.requireOpenLibrary(libraryId);
+    const aiTags = open.connection.prepare('SELECT t.name, a.model_id AS modelId, a.model_version AS modelVersion FROM ai_asset_tags a JOIN tags t ON t.tag_id = a.tag_id WHERE a.asset_id = ?').all(assetId) as Array<{ name: string; modelId: string; modelVersion: string }>;
+    const tagSources: NonNullable<RoutedMetadata['tagSources']> = Object.fromEntries(data.tags.map((tag) => [tag.name, tag.source]));
+    for (const tag of aiTags) if (tagSources[tag.name] === 'user') tagSources[tag.name] = 'both';
     return canonicalMetadata({ description: data.description, rating: data.rating, favorite: data.favorite,
-      palette: data.palette === null ? null : JSON.parse(data.palette) as string[],
-      sourcePageUrl: data.sourcePageUrl, author: data.author, tags: data.tags.map((tag) => tag.name) });
+      palette: data.palette === null ? null : JSON.parse(data.palette) as string[], sourcePageUrl: data.sourcePageUrl, author: data.author,
+      tags: data.tags.map((tag) => tag.name), tagSources, aiTags, aiContent: this.getAiContent(libraryId, assetId) });
+  }
+  restoreVaultMetadataLayers(input: { libraryId: string; assetId: string; metadata: RoutedMetadata; modifiedAt?: string; identities?: Record<string, string> }): void {
+    const open = this.requireOpenLibrary(input.libraryId); this.assertLibraryWritable(open);
+    const asset = open.connection.prepare('SELECT current_revision_id FROM assets WHERE asset_id = ?').get(input.assetId) as { current_revision_id: string } | undefined;
+    if (!asset) throw new LibraryServiceError('ASSET_NOT_FOUND');
+    const metadata = canonicalMetadata(input.metadata);
+    if (input.modifiedAt) { this.noteClientFilesystemMutation(); const time = new Date(input.modifiedAt); utimesSync(this.resolveAssetPath(input.libraryId, input.assetId), time, time); }
+    open.connection.transaction(() => {
+      if (input.modifiedAt) open.connection.prepare('UPDATE revisions SET modified_at = ? WHERE revision_id = ?').run(input.modifiedAt, asset.current_revision_id);
+      open.connection.prepare('UPDATE asset_metadata SET palette = ? WHERE asset_id = ?').run(metadata.palette ? JSON.stringify(metadata.palette) : null, input.assetId);
+      open.connection.prepare('DELETE FROM human_asset_tags WHERE asset_id = ?').run(input.assetId);
+      open.connection.prepare('DELETE FROM ai_asset_tags WHERE asset_id = ?').run(input.assetId);
+      for (const name of metadata.tags) {
+        const tag = open.connection.prepare('SELECT tag_id FROM tags WHERE library_id = ? AND name = ? COLLATE NOCASE').get(input.libraryId, name) as { tag_id: string } | undefined;
+        if (!tag) throw new LibraryServiceError('FOLDER_NOT_FOUND');
+        const source = metadata.tagSources![name];
+        if (source === 'user' || source === 'both') open.connection.prepare('INSERT INTO human_asset_tags (asset_id,tag_id) VALUES (?,?)').run(input.assetId, tag.tag_id);
+        if (source === 'ai' || source === 'both') {
+          const model = metadata.aiTags!.find((item) => item.name === name);
+          open.connection.prepare('INSERT INTO ai_asset_tags (asset_id,tag_id,revision_id,model_id,model_version) VALUES (?,?,?,?,?)').run(input.assetId, tag.tag_id, asset.current_revision_id, model?.modelId ?? '', model?.modelVersion ?? '');
+        }
+      }
+      open.connection.prepare('DELETE FROM ai_content WHERE asset_id = ?').run(input.assetId);
+      for (const content of metadata.aiContent!) open.connection.prepare('INSERT INTO ai_content (ai_content_id,asset_id,revision_id,field_name,value,model_id,model_version,generated_at) VALUES (?,?,?,?,?,?,?,?)').run(randomUUID(), input.assetId, asset.current_revision_id, content.fieldName, content.value, content.modelId, content.modelVersion, content.generatedAt);
+      this.syncAssetSearchContent(open.connection, input.assetId);
+    })();
+    if (input.identities) this.storeStorageIdentities(input.libraryId, input.assetId, input.identities);
+    this.emitClientAssetsChanged(input.libraryId, 1, undefined, false);
   }
   prepareVaultTransfer(input: { libraryId: string; assetId: string }): VaultSource {
     const open = this.requireOpenLibrary(input.libraryId);
     const asset = this.listAssets({ ...input, assetIds: [input.assetId], recursive: true })[0];
     const count = open.connection.prepare('SELECT COUNT(*) AS count FROM revisions WHERE asset_id = ?').get(input.assetId) as { count: number };
-    if (!asset || asset.locationKind !== 'managed' || asset.mediaType !== 'image' || asset.sequence || asset.deletedAt || asset.availability !== 'available' || count.count !== 1) throw new LibraryServiceError('INVALID_SELECTION');
+    if (!asset || asset.locationKind !== 'managed' || asset.sequence || asset.deletedAt || asset.availability !== 'available' || count.count !== 1) throw new LibraryServiceError('INVALID_SELECTION');
     const sourcePath = this.resolveAssetPath(input.libraryId, input.assetId);
+    if (asset.mediaType === 'model' || ['.html','.htm'].includes(path.extname(sourcePath).toLowerCase())) throw new LibraryServiceError('INVALID_SELECTION');
     if (!lstatSync(sourcePath).isFile() || lstatSync(sourcePath).isSymbolicLink()) throw new LibraryServiceError('INVALID_SELECTION');
     const stem = sourcePath.slice(0, -path.extname(sourcePath).length);
     if (['.json', '.txt', '.xmp', '.yaml', '.yml'].some((extension) => existsSync(stem + extension) || existsSync(sourcePath + extension))) throw new LibraryServiceError('INVALID_SELECTION');
     const metadata = this.vaultMetadata(input.libraryId, input.assetId);
-    return { libraryId: input.libraryId, assetId: input.assetId, revisionId: asset.currentRevisionId, sourcePath, fileName: path.basename(sourcePath),
-      sha256: sha256FileAtPath(sourcePath), metadataHash: createHash('sha256').update(JSON.stringify(metadata)).digest('hex'), metadata };
+    return { identities: this.storageIdentities(input.libraryId, input.assetId), libraryId: input.libraryId, assetId: input.assetId, revisionId: asset.currentRevisionId, modifiedAt: asset.modifiedAt, relativeFolder: path.posix.dirname(asset.relativeFilePath) === '.' ? '' : path.posix.dirname(asset.relativeFilePath), sourcePath, fileName: path.basename(sourcePath),
+      sha256: sha256FileAtPath(sourcePath), metadataHash: createHash('sha256').update(JSON.stringify(comparableMetadata(metadata))).digest('hex'), metadata };
   }
   async removeVaultTransferredSource(source: VaultSource): Promise<{ deletedCount: number }> {
     const open = this.requireOpenLibrary(source.libraryId); this.assertLibraryWritable(open);
     await this.cancelMediaJobsForAssets(open, [source.assetId]);
     const current = this.prepareVaultTransfer({ libraryId: source.libraryId, assetId: source.assetId });
-    if (current.revisionId !== source.revisionId || current.sourcePath !== source.sourcePath || current.sha256 !== source.sha256 || current.metadataHash !== source.metadataHash) throw new LibraryServiceError('INVALID_STATE_TRANSITION');
+    if ((source.modifiedAt !== undefined && current.modifiedAt !== source.modifiedAt) || current.revisionId !== source.revisionId || current.sourcePath !== source.sourcePath || current.sha256 !== source.sha256 || current.metadataHash !== source.metadataHash) throw new LibraryServiceError('INVALID_STATE_TRANSITION');
     const cached = open.connection.prepare('SELECT file_path FROM revision_artifacts WHERE revision_id IN (SELECT revision_id FROM revisions WHERE asset_id = ?)').all(source.assetId) as Array<{ file_path: string }>;
     for (const row of cached) {
       const shared = open.connection.prepare('SELECT 1 FROM revision_artifacts WHERE file_path = ? AND revision_id NOT IN (SELECT revision_id FROM revisions WHERE asset_id = ?) LIMIT 1').get(row.file_path, source.assetId);
@@ -20994,12 +21122,13 @@ export class LibraryService {
       }
     }
     const result = this.deleteAssetsFromDisk({ libraryId: source.libraryId, assetIds: [source.assetId] });
+    const identityFile = this.storageIdentityFile(source.libraryId, source.assetId); if (existsSync(identityFile)) rmSync(identityFile);
     this.invalidateArtifactPathCache(source.libraryId); this.emitClientAssetsChanged(source.libraryId, 1);
     return result;
   }
   verifyVaultDestination(input: { libraryId: string; assetId: string; sha256: string; metadata: RoutedMetadata }): void {
     const open = this.requireOpenLibrary(input.libraryId);
-    if (sha256FileAtPath(this.resolveAssetPath(input.libraryId, input.assetId)) !== input.sha256 || JSON.stringify(this.vaultMetadata(input.libraryId, input.assetId)) !== JSON.stringify(canonicalMetadata(input.metadata))) throw new LibraryServiceError('INVALID_STATE_TRANSITION');
+    if (sha256FileAtPath(this.resolveAssetPath(input.libraryId, input.assetId)) !== input.sha256 || JSON.stringify(comparableMetadata(this.vaultMetadata(input.libraryId, input.assetId))) !== JSON.stringify(comparableMetadata(input.metadata))) throw new LibraryServiceError('INVALID_STATE_TRANSITION');
     const checkpoint = open.connection.pragma('wal_checkpoint(FULL)') as Array<{ busy: number }>;
     if (checkpoint.some((row) => row.busy)) throw new LibraryServiceError('LIBRARY_NOT_WRITABLE');
     for (const file of [this.resolveAssetPath(input.libraryId, input.assetId), path.join(open.summary.libraryPath, '.serpent', 'library.db')]) {
@@ -21951,6 +22080,7 @@ export class LibraryService {
     };
   }): { tagsWritten: string[]; fieldsWritten: string[]; committed: boolean } {
     const openLibrary = this.requireOpenLibrary(input.libraryId);
+    const beforeTags = new Set(this.fetchAssetTags(openLibrary.connection, input.assetId).map((tag) => tag.id));
     const now = new Date().toISOString();
     const tagsWritten: string[] = [];
     const fieldsWritten: string[] = [];
@@ -22068,7 +22198,9 @@ export class LibraryService {
 
     if (committed) {
       this.syncAssetSearchContent(openLibrary.connection, input.assetId);
-      this.emitClientAssetsChanged(input.libraryId, 1);
+      const afterTags = new Set(this.fetchAssetTags(openLibrary.connection, input.assetId).map((tag) => tag.id));
+      const addedTagIds = [...afterTags].filter((id) => !beforeTags.has(id)); const removedTagIds = [...beforeTags].filter((id) => !afterTags.has(id));
+      this.emitClientAssetsChanged(input.libraryId, 1, addedTagIds.length || removedTagIds.length ? [{ assetId: input.assetId, addedTagIds, removedTagIds }] : undefined);
     }
 
     return { tagsWritten, fieldsWritten, committed };
@@ -34739,25 +34871,11 @@ export class LibraryService {
     snippets?: Array<{ assetId: string; text: string }>;
   } {
     const openLibrary = this.requireOpenLibrary(input.libraryId);
-    let query = input.query;
-    let filters = input.filters ?? null;
-    let sort = input.sort ?? null;
+    const query = input.query;
+    const filters = input.filters ?? null;
+    const sort = input.sort ?? null;
     if (input.smartCollectionId) {
-      const row = openLibrary.connection
-        .prepare(
-          'SELECT query_definition_json FROM smart_collections WHERE collection_id = ? AND library_id = ?',
-        )
-        .get(input.smartCollectionId, input.libraryId) as {
-          query_definition_json: string;
-        } | undefined;
-      if (!row) throw new LibraryServiceError('FOLDER_NOT_FOUND');
-      const smartCollection = this.parseSmartCollectionDefinition(
-        row.query_definition_json,
-        'LIBRARY_CORRUPT',
-      );
-      query = smartCollection.search ?? null;
-      filters = smartCollection.filters ?? null;
-      sort = smartCollection.sort ?? null;
+      input = { ...input, scope: { kind: 'smart_collection', collectionId: input.smartCollectionId } };
     }
     const definition = {
       smartCollectionId: input.smartCollectionId ?? null,
@@ -35021,6 +35139,7 @@ export class LibraryService {
   }
 
   searchAssets(input: {
+    smartDefinition?: SmartCollectionQueryDefinition;
     libraryId: string;
     query?: { clauses: SearchClause[]; groups?: SearchGroup[] } | null;
     filters?: FilterClause[] | null;
@@ -35052,7 +35171,17 @@ export class LibraryService {
     layout?: BrowseLayoutEntry[];
   } {
     const openLibrary = this.requireOpenLibrary(input.libraryId);
+    let savedDefinition = input.smartDefinition;
+    if (input.scope?.kind === 'smart_collection') {
+      const row = openLibrary.connection.prepare('SELECT query_definition_json FROM smart_collections WHERE collection_id = ? AND library_id = ?').get(input.scope.collectionId, input.libraryId) as { query_definition_json: string } | undefined;
+      if (!row) throw new LibraryServiceError('FOLDER_NOT_FOUND');
+      savedDefinition = this.parseSmartCollectionDefinition(row.query_definition_json, 'LIBRARY_CORRUPT');
+    }
+    if (savedDefinition?.sort && !input.sort) input = { ...input, sort: savedDefinition.sort };
     const connection = openLibrary.connection;
+    // Preserve indexed search performance when no manual include can override it.
+    const liftedSavedSearch = Boolean(savedDefinition?.search && !savedDefinition.includeAssetIds?.length && !input.query?.clauses.length && !input.query?.groups?.length);
+    if (liftedSavedSearch) input = { ...input, query: savedDefinition!.search };
     // Serpent-verg.2 — lenient read (0031 §1): display/derived columns and
     // auxiliary tables added after the earliest supported schema are
     // whitelisted; missing ones degrade the query instead of failing.
@@ -35074,7 +35203,7 @@ export class LibraryService {
       ? undefined
       : [...new Set(input.sessionAssetIds)];
     const sessionMode = sessionAssetIds !== undefined;
-    const defaultBrowseIndexRequest = !sessionMode && this.isDefaultBrowseIndexRequest(input);
+    const defaultBrowseIndexRequest = !savedDefinition && !sessionMode && this.isDefaultBrowseIndexRequest(input);
     const browseIndexSequenceBefore = defaultBrowseIndexRequest
       ? this.getBrowseChangeSequence(input.libraryId)
       : undefined;
@@ -35119,6 +35248,17 @@ export class LibraryService {
       { hasAiContent, hasAiAssetTags },
     );
 
+    const savedSearchGroups = savedDefinition?.search && !liftedSavedSearch ? normalizedSearchGroups(savedDefinition.search) : [];
+    const savedSearch = savedSearchGroups.length ? buildContextualSearchWhere(savedSearchGroups, !hasSearchIndex) : { sql: '', params: [] };
+    const savedFilters = this.buildFilterWhere(savedDefinition?.filters ?? [], { hasAiContent, hasAiAssetTags });
+    const savedRules = savedDefinition?.rules ? compileSmartFolderRule(savedDefinition.rules, hasAiAssetTags) : { sql: '', params: [] };
+    const savedParts = [liftedSavedSearch ? '1' : savedSearch.sql, savedFilters.sql, savedRules.sql].filter(Boolean);
+    const includeIds = [...new Set(savedDefinition?.includeAssetIds ?? [])];
+    const excludeIds = [...new Set(savedDefinition?.excludeAssetIds ?? [])];
+    const automaticSql = savedParts.length ? savedParts.map((part) => `(${part})`).join(' AND ') : savedDefinition?.includeAssetIds !== undefined ? '0' : '1';
+    const savedWhere = savedDefinition ? `(((${automaticSql})${includeIds.length ? ` OR a.asset_id IN (${includeIds.map(() => '?').join(',')})` : ''})${excludeIds.length ? ` AND a.asset_id NOT IN (${excludeIds.map(() => '?').join(',')})` : ''})` : '';
+    const savedParams = [...savedSearch.params, ...savedFilters.params, ...savedRules.params, ...includeIds, ...excludeIds];
+
     // A collection browse is a relational scope, not an asset-id list. Build
     // that scope once per SQL statement so the recursive tree walk and the
     // collection-position lookup are shared by COUNT, first-page, ids-only,
@@ -35161,7 +35301,7 @@ export class LibraryService {
     // needed by technical filters or technical sorts. On a large library the
     // COUNT query and the data query therefore both scanned the artifact
     // table before the renderer even asked for thumbnail rows.
-    const filterFields = new Set((input.filters ?? []).map((filter) => filter.field));
+    const filterFields = new Set([...(input.filters ?? []), ...(savedDefinition?.filters ?? [])].map((filter) => filter.field));
     const needsDurationMeta =
       filterFields.has('width') ||
       filterFields.has('height') ||
@@ -35198,8 +35338,8 @@ export class LibraryService {
           artifactColumns.has('status') ? "AND chosen.status = 'ready'" : '',
         )
       : '';
-    const searchJoins = hasQuery && hasSearchIndex
-      ? `JOIN asset_search_index sc ON a.asset_id = sc.asset_id
+    const searchJoins = (hasQuery || savedSearchGroups.length > 0) && hasSearchIndex
+      ? `${hasQuery ? 'JOIN' : 'LEFT JOIN'} asset_search_index sc ON a.asset_id = sc.asset_id
          ${useTrigramIndex && hasSearchFts ? 'JOIN asset_search s ON sc.rowid = s.rowid' : ''}`
       : '';
     const hasLayoutDimensions =
@@ -35254,6 +35394,7 @@ export class LibraryService {
       allParams.push(...contextualSearchParams);
     }
 
+    if (savedWhere && !sessionMode) { whereParts.push(savedWhere); allParams.push(...savedParams); }
     if (sessionMode) {
       const pageAssetIds = sessionAssetIds.slice(offset, offset + limit);
       whereParts.push(
@@ -35765,8 +35906,7 @@ export class LibraryService {
 
     return this.searchAssets({
       libraryId: input.libraryId,
-      query: definition.search ?? null,
-      filters: definition.filters ?? null,
+      scope: { kind: 'smart_collection', collectionId: input.collectionId },
       sort: definition.sort ?? null,
       scopeMode: input.scopeMode ?? false,
       idsOnly: input.idsOnly ?? false,
@@ -35780,7 +35920,7 @@ export class LibraryService {
     value: string,
     errorCode: 'INVALID_SMART_COLLECTION_QUERY' | 'LIBRARY_CORRUPT',
   ): SmartCollectionQueryDefinition {
-    if (value.length > 65_536) throw new LibraryServiceError(errorCode);
+    if (value.length > 1_048_576) throw new LibraryServiceError(errorCode);
     try {
       return smartCollectionQueryDefinitionSchema.parse(JSON.parse(value));
     } catch {
@@ -35803,8 +35943,7 @@ export class LibraryService {
   ): number {
     return this.searchAssets({
       libraryId,
-      query: definition.search ?? null,
-      filters: definition.filters ?? null,
+      smartDefinition: definition,
       sort: null,
       limit: 0,
       offset: 0,

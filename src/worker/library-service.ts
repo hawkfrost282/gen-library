@@ -20975,6 +20975,12 @@ export class LibraryService {
     return { assetId: input.assetId, colorSpaceOverride: normalized };
   }
 
+  getAssetTableCreatedAt(libraryId: string, assetId: string): string | null {
+    const open = this.requireOpenLibrary(libraryId);
+    const row = open.connection.prepare('SELECT created_at FROM assets WHERE asset_id = ?').get(assetId) as { created_at: string } | undefined;
+    return row?.created_at ?? null;
+  }
+
   getOrganizationSettings(libraryId: string): OrganizationSettings {
     const library = this.requireOpenLibrary(libraryId);
     const file = path.join(library.summary.libraryPath, '.serpent', 'organization.json');

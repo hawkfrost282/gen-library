@@ -14,7 +14,7 @@ export type CanvasCaptionAlign = 'left' | 'center' | 'right';
 
 export interface CanvasPreferences {
   readonly version: 1;
-  readonly viewMode: 'grid' | 'masonry';
+  readonly viewMode: 'grid' | 'masonry' | 'list';
   readonly cardSize: number;
   readonly captionAlign: CanvasCaptionAlign;
   readonly fields: {
@@ -86,7 +86,7 @@ const canvasFieldsSchema = z
 const canvasPreferencesSchema = z
   .object({
     version: z.literal(1),
-    viewMode: z.enum(['grid', 'masonry']),
+    viewMode: z.enum(['grid', 'masonry', 'list']),
     cardSize: z.number().int().min(CARD_SIZE_MIN).max(CARD_SIZE_MAX),
     captionAlign: canvasCaptionAlignSchema.optional(),
     fields: canvasFieldsSchema,

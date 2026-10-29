@@ -41,6 +41,7 @@ export function buildRecentLibraryMenuEntries(
 }
 
 export type LibrarySwitcherProps = {
+  onContextMenu?: (event: React.MouseEvent) => void;
   libraryName: string | null;
   disabled?: boolean;
   onCreateLibrary: () => void;
@@ -88,6 +89,7 @@ export type LibrarySwitcherProps = {
  * Replaces the brand glyph + static label.
  */
 export function LibrarySwitcher({
+  onContextMenu,
   libraryName,
   disabled = false,
   onCreateLibrary,
@@ -343,6 +345,7 @@ export function LibrarySwitcher({
             : t("shell.libraryMenu")
         }
         className="library-switcher-trigger"
+        onContextMenu={onContextMenu}
         disabled={disabled}
         onClick={() => {
           if (open) {

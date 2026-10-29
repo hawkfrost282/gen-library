@@ -46,6 +46,7 @@ export const TOOLBAR_CANVAS_COMMAND_IDS = [
   'canvas.refresh',
   'canvas.view.grid',
   'canvas.view.masonry',
+  'canvas.view.list',
   'canvas.field.name',
   'canvas.field.size',
   'canvas.field.date',
@@ -97,6 +98,7 @@ export const toolbarCommandDefinitions: readonly ToolbarCommandDefinition[] = [
     group: 'open',
     run: (ctx) => ctx.actions.setViewMode('masonry'),
   },
+  { id: 'canvas.view.list', title: () => 'List view', group: 'open', run: (ctx) => ctx.actions.setViewMode('list') },
   {
     id: 'canvas.field.name',
     title: (ctx) => t(ctx, 'toolbar.showFileName'),

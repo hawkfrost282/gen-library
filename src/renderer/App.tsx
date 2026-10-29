@@ -1,3 +1,5 @@
+import { AssetListView } from './AssetListView';
+import type { AssetTableApi } from '../shared/asset-table';
 import { OrganizationEntry } from './OrganizationEntry';
 import type { OrganizationApi } from '../shared/organization';
 import { VaultEntry } from './VaultEntry';
@@ -721,6 +723,7 @@ type RendererWindow = Window & {
     library?: SerpentLibraryApi;
     vault?: VaultApi;
     organization?: OrganizationApi;
+    assetTable?: AssetTableApi;
     shell?: SerpentShellApi;
     appUpdate?: SerpentAppUpdateApi;
     automation?: SerpentAutomationScriptApi;
@@ -3220,7 +3223,7 @@ function AppInner() {
   // Map the scrollbar to the compact real-asset index. One-frame coalescing
   // avoids request spam without spending 50ms of the 500ms loading budget.
   useEffect(() => {
-    if (!api || !library) return;
+    if (!api || !library || assetViewMode === "list") return;
     const canvas = workspaceCanvasRef.current;
     if (!canvas) return;
     const rankById = virtualBrowseLayout
@@ -3320,6 +3323,7 @@ function AppInner() {
     };
   }, [
     api,
+    assetViewMode,
     browseLayout,
     ensureBrowseVisibleRange,
     ensureBrowseVisibleIndices,
@@ -13928,59 +13932,7 @@ function AppInner() {
             }
             handleFolderCardClick(folderId, event);
           }}
-          onContextMenu={(clickedEntry, event) => {
-            event.preventDefault();
-            if (showTrash) {
-              openContextMenu(
-                {
-                  type: "trashed-folder",
-                  tombstoneId: clickedEntry.folderId,
-                  name: clickedEntry.name,
-                  relativePath: clickedEntry.relativePath,
-                },
-                { x: event.clientX, y: event.clientY },
-              );
-              return;
-            }
-            const intent = resolveBrowseContextMenuIntent(
-              { kind: "folder", id: clickedEntry.folderId },
-              {
-                assetIds: selectedAssetIds,
-                folderIds: selectedFolderIds,
-              },
-            );
-            if (intent.type === "single-folder") {
-              setSelectedFolderIds([intent.folderId]);
-              setSelectedAssetIds([]);
-              openContextMenu(
-                {
-                  type: "folder",
-                  folderId:
-                    clickedEntry.linkedFolderId ?? intent.folderId,
-                  name: clickedEntry.name,
-                  locationKind: clickedEntry.locationKind,
-                  linkedRelativePath:
-                    clickedEntry.locationKind === "linked" &&
-                    clickedEntry.relativePath
-                      ? clickedEntry.relativePath
-                      : undefined,
-                },
-                { x: event.clientX, y: event.clientY },
-              );
-              return;
-            }
-            if (intent.type !== "multi") return;
-            openContextMenu(
-              {
-                type: "multi-asset",
-                assetIds: [...intent.assetIds],
-                folderIds: [...intent.folderIds],
-                count:
-                  intent.assetIds.length + intent.folderIds.length,
-              },
-              { x: event.clientX, y: event.clientY },
-            );
-          }}
+          onContextMenu={openFolderFileMenu}
           onDoubleClick={(folderId) => {
             if (showTrash) {
               const entry = folderRowEntries.find(
@@ -14000,6 +13952,109 @@ function AppInner() {
       ))}
     </div>
   ) : null;
+
+  function openFolderFileMenu(clickedEntry: FolderBrowseEntry, event: React.MouseEvent) {
+    event.preventDefault();
+    if (showTrash) {
+      openContextMenu(
+        {
+          type: "trashed-folder",
+          tombstoneId: clickedEntry.folderId,
+          name: clickedEntry.name,
+          relativePath: clickedEntry.relativePath,
+        },
+        { x: event.clientX, y: event.clientY },
+      );
+      return;
+    }
+    const intent = resolveBrowseContextMenuIntent(
+      { kind: "folder", id: clickedEntry.folderId },
+      {
+        assetIds: selectedAssetIds,
+        folderIds: selectedFolderIds,
+      },
+    );
+    if (intent.type === "single-folder") {
+      setSelectedFolderIds([intent.folderId]);
+      setSelectedAssetIds([]);
+      openContextMenu(
+        {
+          type: "folder",
+          folderId:
+            clickedEntry.linkedFolderId ?? intent.folderId,
+          name: clickedEntry.name,
+          locationKind: clickedEntry.locationKind,
+          linkedRelativePath:
+            clickedEntry.locationKind === "linked" &&
+            clickedEntry.relativePath
+              ? clickedEntry.relativePath
+              : undefined,
+        },
+        { x: event.clientX, y: event.clientY },
+      );
+      return;
+    }
+    if (intent.type !== "multi") return;
+    openContextMenu(
+      {
+        type: "multi-asset",
+        assetIds: [...intent.assetIds],
+        folderIds: [...intent.folderIds],
+        count:
+          intent.assetIds.length + intent.folderIds.length,
+      },
+      { x: event.clientX, y: event.clientY },
+    );
+
+  }
+
+
+  function openAssetFileMenu(asset: AssetSummary, e: React.MouseEvent, cell?: { label: string; value: string }) {
+    e.preventDefault();
+    const intent = resolveBrowseContextMenuIntent(
+      { kind: "asset", id: asset.assetId },
+      {
+        assetIds: selectedAssetIds,
+        folderIds: selectedFolderIds,
+      },
+    );
+    if (intent.type === "single-asset") {
+      if (!selectedIdSet.has(intent.assetId)) {
+        setSelectedAssetIds([intent.assetId]);
+        setSelectedAssetId(intent.assetId);
+      }
+      setSelectedFolderIds([]);
+      if (library) {
+        openContextMenu(
+          {
+            type: "asset",
+            assetId: asset.assetId,
+            displayName: asset.displayName,
+            ...(cell ? { cell } : {}),
+            locationKind: asset.locationKind,
+            isAvailable: asset.availability === "available",
+            isDeleted: Boolean(asset.deletedAt),
+          },
+          { x: e.clientX, y: e.clientY },
+        );
+      }
+      return;
+    }
+    if (intent.type !== "multi" || !library) return;
+    openContextMenu(
+      {
+        type: "multi-asset",
+        assetIds: [...intent.assetIds],
+        ...(cell ? { cell } : {}),
+        folderIds: [...intent.folderIds],
+        count:
+          intent.assetIds.length + intent.folderIds.length,
+      },
+      { x: e.clientX, y: e.clientY },
+    );
+
+  }
+
 
   return (
     <>
@@ -14152,6 +14207,7 @@ function AppInner() {
             syncStatus={syncBindingStatus}
             importMenuCopy={importMenuCopy}
             libraryName={library?.displayName ?? null}
+            onContextMenu={library ? (event) => { event.preventDefault(); openContextMenu({ type: 'folder',folderId: LIBRARY_ROOT_FOLDER_ID,name: 'Library files',locationKind: 'managed',isLibraryRoot: true },{ x: event.clientX,y: event.clientY }); } : undefined}
             libraryOpen={Boolean(library)}
             onCloseLibrary={() => void closeLibrary()}
             onRemoveLibrary={() => void removeLibrary()}
@@ -14951,6 +15007,7 @@ function AppInner() {
               longEdgeRange,
               durationRange,
             }}
+            hideSort={assetViewMode === "list"}
             sortField={sortField}
             sortOrder={sortOrder}
             sourceUrlFilter={sourceUrlFilter}
@@ -15136,6 +15193,17 @@ function AppInner() {
                 void handleSearchTagsFromManagement(names, match)
               }
               tags={tags}
+            />
+          ) : library && assetViewMode === "list" && api && (window as RendererWindow).serpent?.assetTable ? (
+            <AssetListView key={JSON.stringify([library.libraryId,currentQueryDefinition().search,currentQueryDefinition().filters,showTrash,activeSmartCollectionId,activeCollectionId,assetScope,folderRecursive,collectionRecursive,showIgnoredItems])} api={(window as RendererWindow).serpent!.assetTable!} libraryApi={api} libraryId={library.libraryId}
+              query={{ query: currentQueryDefinition().search ?? null, filters: currentQueryDefinition().filters, scope: showTrash ? { kind: 'trash' } : activeSmartCollectionId ? { kind: 'smart_collection', collectionId: activeSmartCollectionId } : currentSearchScope(currentQueryDefinition().search !== undefined), showIgnored: showIgnoredItems }}
+              selectedIds={selectedAssetIds}
+              folders={folderRowEntries} selectedFolderIds={selectedFolderIds}
+              onFolderClick={(id,event) => handleFolderCardClick(id,event)} onOpenFolder={(id) => { if (showTrash) void enterTrashAt(id); else void chooseFolder(id); }} onFolderContextMenu={openFolderFileMenu}
+              onRows={(rows) => { const merge = (current: AssetSummary[]) => { const byId = new Map(current.map((asset) => [asset.assetId,asset])); for (const asset of rows) byId.set(asset.assetId,asset); return [...byId.values()]; }; if (showTrash) setTrashedAssets(merge); else setAssets(merge); }}
+              onSelect={(ids,primary) => { setSelectedAssetIds(ids); setSelectedAssetId(primary ?? undefined); setSelectedFolderIds([]); }}
+              onOpen={openAssetPreview}
+              onContextMenu={openAssetFileMenu}
             />
           ) : library ? (
             browseCanvasBodyLayout.mode !== "empty" ? (
@@ -15402,48 +15470,7 @@ function AppInner() {
                           asset.assetId,
                         );
                       }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        const intent = resolveBrowseContextMenuIntent(
-                          { kind: "asset", id: asset.assetId },
-                          {
-                            assetIds: selectedAssetIds,
-                            folderIds: selectedFolderIds,
-                          },
-                        );
-                        if (intent.type === "single-asset") {
-                          if (!selectedIdSet.has(intent.assetId)) {
-                            setSelectedAssetIds([intent.assetId]);
-                            setSelectedAssetId(intent.assetId);
-                          }
-                          setSelectedFolderIds([]);
-                          if (library) {
-                            openContextMenu(
-                              {
-                                type: "asset",
-                                assetId: asset.assetId,
-                                displayName: asset.displayName,
-                                locationKind: asset.locationKind,
-                                isAvailable: asset.availability === "available",
-                                isDeleted: Boolean(asset.deletedAt),
-                              },
-                              { x: e.clientX, y: e.clientY },
-                            );
-                          }
-                          return;
-                        }
-                        if (intent.type !== "multi" || !library) return;
-                        openContextMenu(
-                          {
-                            type: "multi-asset",
-                            assetIds: [...intent.assetIds],
-                            folderIds: [...intent.folderIds],
-                            count:
-                              intent.assetIds.length + intent.folderIds.length,
-                          },
-                          { x: e.clientX, y: e.clientY },
-                        );
-                      }}
+                      onContextMenu={(event) => openAssetFileMenu(asset,event)}
                       type="button"
                     >
                       <div
@@ -16002,6 +16029,7 @@ function AppInner() {
         )}
       </section>
       <InspectorPanel
+        onAssetContextMenu={openAssetFileMenu}
         onRevealInFolder={privateWorkspace ? undefined : (assetId) => void handleRevealInFolder(assetId)}
         revealInFolderLabel={t(IS_WINDOWS_PLATFORM ? "command.asset.revealInFolderWindows" : "command.asset.revealInFolder")}
         aiContent={
@@ -16861,6 +16889,15 @@ function AppInner() {
       />
       {/* Unified context menu */}
       <AssetContextMenu
+        workspaceActions={library ? {
+          viewMode: assetViewMode,
+          setViewMode: (mode) => setCanvasPrefs((p) => ({ ...p,viewMode: mode })),
+          importFiles: () => void importAssets('files'), importFolder: () => void importAssets('folder'),
+          newFolder: () => openInlineFolderCreate(managedImportTargetFolderIdRef.current ?? null),
+          refresh: () => void refreshAssets(),
+          ...(privateWorkspace ? {} : { openFiles: () => void handleOpenFolderInFileManager(LIBRARY_ROOT_FOLDER_ID) }),
+        } : undefined}
+        onCopyMetadataText={(text) => { void navigator.clipboard.writeText(text).catch(() => setError('The value could not be copied.')); }}
         busy={busy}
         libraryId={library?.libraryId}
         pluginBrowseScope={pluginBrowseScope}

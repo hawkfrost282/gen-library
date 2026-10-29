@@ -87,6 +87,7 @@ const HOVER_CLOSE_DELAY_MS = 150;
 const EMPTY_RANGE: RangeState = { min: "", max: "", exclude: false };
 
 export type DimensionFilterBarProps = {
+  hideSort?: boolean;
   disabled?: boolean;
   /**
    * Serpent-0rk: highest-layer modal is open — do not open hover popovers or
@@ -269,6 +270,7 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
     setHeightRange,
     durationRange,
     setDurationRange,
+    hideSort = false,
     sortField,
     setSortField,
     sortOrder,
@@ -1185,7 +1187,7 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
           )}
         </div>
 
-        <SortModeControl
+        {!hideSort ? <SortModeControl
           disabled={controlsDisabled}
           onShuffle={onShuffle}
           setSortField={setSortField}
@@ -1193,7 +1195,7 @@ export function DimensionFilterBar(props: DimensionFilterBarProps) {
           shuffleActive={shuffleActive}
           sortField={sortField}
           sortOrder={sortOrder}
-        />
+        /> : null}
       </div>
 
       {chips.length > 0 && (

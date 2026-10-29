@@ -25,6 +25,7 @@ import { MenuSurface, resolveMenuNodes } from "./ui/patterns";
 export type ContextMenuDescriptor =
   | {
       type: "asset";
+      cell?: { label: string; value: string };
       assetId: string;
       displayName: string;
       locationKind: "managed" | "linked";
@@ -67,6 +68,7 @@ export type ContextMenuDescriptor =
     }
   | {
       type: "multi-asset";
+      cell?: { label: string; value: string };
       assetIds: string[];
       /** Canvas folder cards in the same multi/mixed selection (Serpent-koy). */
       folderIds?: string[];

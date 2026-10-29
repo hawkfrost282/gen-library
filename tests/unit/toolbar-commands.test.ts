@@ -90,6 +90,7 @@ describe('工具栏命令可见性', () => {
     expect(resolveIds(ctx)).toEqual([
       'canvas.view.grid',
       'canvas.view.masonry',
+      'canvas.view.list',
       'canvas.refresh',
       'workspace.ai-settings',
       'workspace.app-settings',
@@ -106,6 +107,7 @@ describe('工具栏命令可见性', () => {
     expect(resolveIds(ctx)).toEqual([
       'canvas.view.grid',
       'canvas.view.masonry',
+      'canvas.view.list',
       'canvas.refresh',
       'workspace.app-settings',
       'canvas.field.name',
@@ -131,6 +133,7 @@ describe('工具栏命令可见性', () => {
       'canvas.refresh',
       'canvas.view.grid',
       'canvas.view.masonry',
+      'canvas.view.list',
       'canvas.field.name',
       'canvas.field.size',
       'canvas.field.date',
@@ -160,6 +163,7 @@ describe('禁用原因', () => {
     for (const id of [
       'canvas.view.grid',
       'canvas.view.masonry',
+      'canvas.view.list',
       'canvas.field.name',
     ] as const) {
       expect(findItem(registry.resolveMenu(ctx), id).disabled).toBe(false);

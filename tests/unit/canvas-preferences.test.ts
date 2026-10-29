@@ -165,7 +165,7 @@ describe('loadCanvasPreferences', () => {
     const storage = createStorageStub({
       [PREF_KEY]: JSON.stringify({
         version: 1,
-        viewMode: 'list' as unknown,
+        viewMode: 'unsupported' as unknown,
         cardSize: 160,
         fields: { ...DEFAULT_CANVAS_PREFERENCES.fields },
       }),

@@ -1,3 +1,4 @@
+import { TABLE_CHANNEL, tableRequestSchema } from '../shared/asset-table';
 import { VaultReturnMigration } from './vault-return-migration';
 import { ORGANIZATION_CHANNEL, DEFAULT_ORGANIZATION, organizationRequestSchema } from '../shared/organization';
 import { preparePrivateProfile, activatePrivateProfileEnvironment, PRIVATE_LIBRARY_NAME, assertPrivateCommand } from '../shared/private-runtime-policy';
@@ -4941,6 +4942,15 @@ async function startApplication(): Promise<void> {
     const lockVaults = () => { void vaultClient?.lockAll().catch(() => dialog.showErrorBox('A vault remains unlocked', 'Close files using the vault, then use Encrypted libraries → Lock.')); };
     powerMonitor.on('lock-screen', lockVaults); powerMonitor.on('suspend', lockVaults);
   }
+  ipcMain.handle(TABLE_CHANNEL, async (event, input: unknown) => {
+    try {
+      if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error('The list request sender is not authorized.');
+      const request = tableRequestSchema.parse(input);
+      const response = await workerClient!.request({ type: 'asset.table.page', ...request });
+      if (!response.ok || response.type !== 'asset.table.page') throw new Error(response.ok ? 'Cannot read this list.' : response.error.message);
+      return response.result;
+    } catch (error) { return { rows: [], assetIds: [], total: 0, offset: 0, error: error instanceof Error ? error.message : 'Cannot read this list.' }; }
+  });
   ipcMain.handle(ORGANIZATION_CHANNEL, async (event, input: unknown) => {
     try {
       if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error('The organization request sender is not authorized.');

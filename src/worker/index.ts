@@ -1,3 +1,4 @@
+import { AssetTableService } from './asset-table-service';
 import { assertPrivateCommand } from '../shared/private-runtime-policy';
 import { randomUUID } from 'node:crypto';
 import {
@@ -279,6 +280,7 @@ const libraryService = new LibraryService({
     }
   },
 });
+const assetTableService = new AssetTableService(libraryService);
 
 function automaticMediaAdmissionAllowed(libraryId: string): boolean {
   return !closingLibraryIds.has(libraryId) && libraryService.hasOpenLibrary(libraryId);
@@ -2744,6 +2746,7 @@ async function handleRequestWithoutWriteLease(request: WorkerRequest): Promise<W
       }
       return result;
     }
+    case 'asset.table.page': return { ok: true, type: 'asset.table.page', result: await assetTableService.page(request.command) };
     case 'asset.metadata.get':
     case 'asset.extracted-metadata.get':
     case 'asset.color-space.set':

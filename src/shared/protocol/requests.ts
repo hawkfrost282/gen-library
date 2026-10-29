@@ -1,3 +1,4 @@
+import { tableRequestSchema } from '../asset-table';
 import { organizationSettingsSchema } from '../organization';
 import { vaultSourceSchema, routedMetadataSchema, storageIdentitiesSchema } from '../vault-routing';
 import { z } from 'zod';
@@ -1510,6 +1511,7 @@ export function parseRendererRequest(input: unknown): RendererRequest {
 }
 
 export const workerCommandSchema = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.literal('asset.table.page'), ...tableRequestSchema.shape }),
   z.strictObject({ type: z.literal('vault.metadata.restore-layers'), libraryId: identifierSchema, assetId: identifierSchema, metadata: routedMetadataSchema, modifiedAt: z.string().datetime().optional(), identities: storageIdentitiesSchema.optional() }),
   z.strictObject({ type: z.literal('vault.return.inventory'), libraryId: identifierSchema }),
   z.strictObject({ type: z.literal('vault.return.prepare'), libraryId: identifierSchema, assetId: identifierSchema }),

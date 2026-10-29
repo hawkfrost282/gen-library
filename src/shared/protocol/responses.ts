@@ -1,3 +1,4 @@
+import { tableResponseSchema } from '../asset-table';
 import { vaultInventorySchema } from '../vault-return';
 import { organizationSettingsSchema } from '../organization';
 import { vaultSourceSchema } from '../vault-routing';
@@ -1771,6 +1772,7 @@ const assetOperationSuccessSchemas = [
 ] as const;
 
 const workerSuccessResultSchema = z.discriminatedUnion('type', [
+  z.strictObject({ ok: z.literal(true), type: z.literal('asset.table.page'), result: tableResponseSchema }),
   z.strictObject({ ok: z.literal(true), type: z.literal('vault.return.inventory'), inventory: vaultInventorySchema }),
   z.strictObject({ ok: z.literal(true), type: z.literal('organization.settings'), settings: organizationSettingsSchema, movedCount: z.number().int().nonnegative().optional(), skippedCount: z.number().int().nonnegative().optional() }),
   z.strictObject({

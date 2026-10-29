@@ -337,6 +337,9 @@ function FolderCoverMenuItems({
 }
 
 interface AssetContextMenuProps {
+  workspaceActions?: { viewMode: 'grid'|'masonry'|'list'; setViewMode(mode: 'grid'|'masonry'|'list'): void; importFiles(): void; importFolder(): void; newFolder(): void; refresh(): void; openFiles?(): void };
+  onCopyMetadataText?(value: string): void;
+
   libraryId?: string;
   busy?: boolean;
   pluginBrowseScope?: Partial<PluginContributionContext["browse"]>;
@@ -717,7 +720,7 @@ export function AssetContextMenu(props: AssetContextMenuProps) {
   // active descriptor stays set so a late async contribution still appears.
   if (
     activeContextMenu.descriptor.type === "workspace" &&
-    pluginWorkspaceMenuItems.length === 0
+    pluginWorkspaceMenuItems.length === 0 && !props.workspaceActions
   ) {
     return null;
   }
@@ -788,7 +791,11 @@ export function AssetContextMenu(props: AssetContextMenuProps) {
           const desc = activeContextMenu.descriptor;
           if (desc.type !== "workspace") return null;
           const assetIds = desc.assetIds;
-          return (
+          return (<>
+            {props.workspaceActions ? <>
+              <ContextMenuSection label="View">{(['grid','masonry','list'] as const).map((mode) => <ContextMenuItem key={mode} label={mode === 'grid' ? 'Thumbnail grid' : mode === 'masonry' ? 'Masonry thumbnails' : 'List view'} checked={props.workspaceActions!.viewMode === mode} onAction={() => props.workspaceActions!.setViewMode(mode)} />)}</ContextMenuSection>
+              <ContextMenuSection label="Library"><ContextMenuItem label="Import files…" onAction={props.workspaceActions.importFiles} /><ContextMenuItem label="Import folder…" onAction={props.workspaceActions.importFolder} /><ContextMenuItem label="New physical folder…" onAction={props.workspaceActions.newFolder} />{props.workspaceActions.openFiles ? <ContextMenuItem label={isMac ? 'Library files in Finder' : 'Library files in File Explorer'} onAction={props.workspaceActions.openFiles} /> : null}<ContextMenuItem label="Refresh disk changes" onAction={props.workspaceActions.refresh} /></ContextMenuSection>
+            </> : null}
             <PluginMenuCommandsSection
               items={pluginWorkspaceMenuItems}
               label={t("contextMenu.pluginCommands")}
@@ -799,8 +806,9 @@ export function AssetContextMenu(props: AssetContextMenuProps) {
                   : { assetIds: [...assetIds] },
               )}
             />
-          );
+          </>);
         })()}
+        {('cell' in activeContextMenu.descriptor) && activeContextMenu.descriptor.cell && props.onCopyMetadataText ? <ContextMenuSection><ContextMenuItem label={`Copy ${activeContextMenu.descriptor.cell.label}`} onAction={() => { const descriptor = activeContextMenu.descriptor; if ('cell' in descriptor && descriptor.cell) props.onCopyMetadataText?.(descriptor.cell.value); }} /></ContextMenuSection> : null}
         {activeContextMenu.descriptor.type === "workspace-tab" && (() => {
           const desc = activeContextMenu.descriptor;
           if (desc.type !== "workspace-tab") return null;

@@ -1,3 +1,4 @@
+import { assetTable } from './bridge/asset-table';
 import { contextBridge } from 'electron';
 
 import { organization } from './bridge/organization';
@@ -63,6 +64,7 @@ contextBridge.exposeInMainWorld(
     library,
     vault,
     organization,
+    assetTable,
     shell,
     shortcuts,
     startup,

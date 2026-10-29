@@ -160,6 +160,7 @@ export interface AiContent {
 }
 
 export interface InspectorPanelProps {
+  onAssetContextMenu?: (asset: AssetSummary,event: React.MouseEvent) => void;
   onRevealInFolder?: (assetId: string) => void;
   revealInFolderLabel?: string;
   selectedAsset: AssetSummary | undefined;
@@ -629,6 +630,7 @@ function tagColor(tagId: string) {
 
 export function InspectorPanel(props: InspectorPanelProps) {
   const {
+    onAssetContextMenu,
     onRevealInFolder,
     revealInFolderLabel,
     selectedAsset,
@@ -1190,7 +1192,7 @@ export function InspectorPanel(props: InspectorPanelProps) {
     >
       {inspectorCardFeelEnabled ? <InspectorCardFeelMotion /> : null}
       {selectedAsset ? (
-        <div className="inspector-content">
+        <div className="inspector-content" onContextMenu={(event) => { if (event.target instanceof Element && event.target.closest('.inspector-hero-compact') && !event.target.closest('button,input,textarea,a')) onAssetContextMenu?.(selectedAsset,event); }}>
           <InspectorHero
             api={api}
             asset={selectedAsset}

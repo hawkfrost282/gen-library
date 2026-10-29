@@ -151,6 +151,8 @@ export function CanvasToolbarControls({
           onClick={masonry.run}
           pressed={canvasPrefs.viewMode === "masonry"}
         />
+        <ToolButton icon="menu" label="List view" onClick={resolveItem(ctx, "canvas.view.list").run} pressed={canvasPrefs.viewMode === "list"} />
+        {canvasPrefs.viewMode !== "list" ? <>
         <label className="asset-size-control">
           <Slider
             aria-label={translateCardSizeLabel(locale)}
@@ -189,6 +191,7 @@ export function CanvasToolbarControls({
             />
           );
         })()}
+        </> : null}
       </div>
     </ShellSurface>
   );

@@ -1,4 +1,4 @@
-# Organization model review — Gen Library personal.5
+# Organization model review — Gen Library personal.6
 
 The design now treats physical storage, descriptive metadata and Smart Folder membership as separate concerns. No existing user collection is reorganized by installing this preview.
 
@@ -16,6 +16,10 @@ The design now treats physical storage, descriptive metadata and Smart Folder me
 | Re-enable | No existing-match decision | Turning on a trigger asks to move existing matches or apply it only to future assignments |
 
 ## Physical storage
+
+Standard file/folder imports, dropped files and pasted images are managed copies in the Library's ordinary `Assets/` tree. Source originals remain in place. Linked-folder import is a separate explicit action, not the default. The files are not embedded in a proprietary library package: the hidden `.serpent/` area holds the catalog and derived data separately.
+
+The normal workspace has a visible **Library files in Finder** button above the image grid that opens the actual `Assets/` directory. Selecting one asset also exposes **Reveal in Finder** in its details panel, resolving its canonical disk location through the existing worker shell-action path. Folder context menus retain **Open in Finder**. Windows uses File Explorer labels. Private Vault workspace restrictions remain unchanged; this shortcut does not unlock or export protected storage.
 
 The Organization button applies to the active Library, including a private Vault Library. Enabling character organization affects new imports and actual character-tag changes. Enabling the setting alone does not move existing files. Reorganizing existing files is a separate explicit action.
 

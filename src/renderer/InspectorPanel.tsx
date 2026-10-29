@@ -160,6 +160,8 @@ export interface AiContent {
 }
 
 export interface InspectorPanelProps {
+  onRevealInFolder?: (assetId: string) => void;
+  revealInFolderLabel?: string;
   selectedAsset: AssetSummary | undefined;
   /** Full multi-selection in canvas order; primary is still `selectedAsset`. */
   selectedAssets?: AssetSummary[];
@@ -627,6 +629,8 @@ function tagColor(tagId: string) {
 
 export function InspectorPanel(props: InspectorPanelProps) {
   const {
+    onRevealInFolder,
+    revealInFolderLabel,
     selectedAsset,
     selectedAssets = [],
     library,
@@ -1202,6 +1206,9 @@ export function InspectorPanel(props: InspectorPanelProps) {
             }
             selectionCount={selectionCount}
           />
+          {onRevealInFolder && selectionCount === 1 && !selectedAsset.deletedAt ? <button className="secondary-button" type="button" disabled={selectedAsset.availability !== 'available'} data-hover-tip={t("toolbar.showSelectedFileHint")} onClick={() => onRevealInFolder(selectedAsset.assetId)}>
+            <Icon name="folder" size={14} />{revealInFolderLabel ?? t("command.asset.revealInFolder")}
+          </button> : null}
           {!isMultiEdit &&
             selectionCount < 2 &&
             (selectedAsset.deletedAt || isCorruptAsset(selectedAsset)) && (

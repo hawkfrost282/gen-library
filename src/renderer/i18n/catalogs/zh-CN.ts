@@ -281,6 +281,10 @@ export const zhCN = {
     menuAriaLabel: "标签操作（{count} 个）"
   },
   toolbar: {
+    libraryFilesFinder: "在 Finder 中打开资源库文件",
+    libraryFilesExplorer: "在文件资源管理器中打开资源库文件",
+    libraryFilesHint: "打开此资源库实际的 Assets 文件夹。导入文件以普通文件存储在这里；原始源文件保持原位。",
+    showSelectedFileHint: "在磁盘的实际位置显示所选文件。",
     searchLibrary: "搜索资源库",
     searchPlaceholder: "搜索",
     searchSyntax: "搜索语法",

@@ -293,6 +293,10 @@ export const en = {
     menuAriaLabel: "Tag operations ({count})"
   },
   toolbar: {
+    libraryFilesFinder: "Library files in Finder",
+    libraryFilesExplorer: "Library files in File Explorer",
+    libraryFilesHint: "Open this Library’s actual Assets folder. Imported files are ordinary files here; your original source files stay where they are.",
+    showSelectedFileHint: "Show the selected file at its actual location on disk.",
     searchLibrary: "Search library",
     searchPlaceholder: "Search",
     searchSyntax: "Search syntax",
@@ -2321,7 +2325,7 @@ export const en = {
   empty: {
     folderTitle: "This folder is empty",
     folderBody: "Add your first assets",
-    folderDetail: "Files are copied into a readable Assets directory with stable asset identities.",
+    folderDetail: "Import copies your files into this Library’s Assets folder and leaves your originals in place. Use Library files in Finder to see them directly.",
     searchTitle: "No matching assets",
     searchBody: "Try a different query or clear filters.",
     trashTitle: "Trash is empty",

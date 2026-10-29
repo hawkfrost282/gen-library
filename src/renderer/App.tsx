@@ -14185,7 +14185,7 @@ function AppInner() {
         <div className="toolbar-cluster toolbar-workspace-cluster">
           <div className="toolbar-workspace-main">
             <div className="toolbar-workspace-leading">
-            <OrganizationEntry key={library?.libraryId} libraryId={library?.libraryId} api={(window as RendererWindow).serpent?.organization} onVisibilityChange={setEncryptedDialogOpen} />
+            <OrganizationEntry key={library?.libraryId} libraryId={library?.libraryId} privateWorkspace={privateWorkspace} api={(window as RendererWindow).serpent?.organization} onVisibilityChange={setEncryptedDialogOpen} />
             {activeSmartCollectionId ? <button className="secondary-button" type="button" onClick={() => { const folder = smartCollections.find((item) => item.collectionId === activeSmartCollectionId); if (folder) setSmartCollectionSettings({ collectionId: folder.collectionId, name: folder.name }); }}>Smart Folder rules</button> : null}
             <VaultEntry compact libraryId={library?.libraryId} libraryName={library?.displayName} selectedAssetIds={selectedAssetIds} api={(window as RendererWindow).serpent?.vault} onVisibilityChange={setEncryptedDialogOpen} />
               <ScopeHistoryButtons
@@ -14741,6 +14741,9 @@ function AppInner() {
             </span>
           </div>
           <div className="workspace-tools">
+            {library && !privateWorkspace ? <button className="compact-action" type="button" disabled={busy} data-hover-tip={t("toolbar.libraryFilesHint")} onClick={() => void handleOpenFolderInFileManager(LIBRARY_ROOT_FOLDER_ID)}>
+              <Icon name="folder" size={14} />{t(IS_WINDOWS_PLATFORM ? "toolbar.libraryFilesExplorer" : "toolbar.libraryFilesFinder")}
+            </button> : null}
             {library && showTrash ? (
               <>
                 <button
@@ -15999,6 +16002,8 @@ function AppInner() {
         )}
       </section>
       <InspectorPanel
+        onRevealInFolder={privateWorkspace ? undefined : (assetId) => void handleRevealInFolder(assetId)}
+        revealInFolderLabel={t(IS_WINDOWS_PLATFORM ? "command.asset.revealInFolderWindows" : "command.asset.revealInFolder")}
         aiContent={
           aiContent?.assetId === selectedAsset?.assetId ? aiContent : null
         }

@@ -45,9 +45,16 @@ export type MainMenuSection = {
 export type MainMenuCommandState = {
   readonly command: ApplicationMenuCommand;
   readonly enabled: boolean;
+  readonly label?: string;
+  readonly checked?: boolean;
 };
 
 const APPLICATION_MENU_ITEM_COMMANDS: Readonly<Record<string, ApplicationMenuCommand>> = {
+  "canvas.view.grid": "canvas.view.grid",
+  "canvas.view.masonry": "canvas.view.masonry",
+  "canvas.view.list": "canvas.view.list",
+  "view.toggle-sidebar": "view.toggle-sidebar",
+  "view.toggle-inspector": "view.toggle-inspector",
   "edit.copy-selection": "copy-selection",
   "edit.invert-selection": "invert-selection",
   "file.import-files": "file.import-files",
@@ -81,25 +88,28 @@ const APPLICATION_MENU_ITEM_COMMANDS: Readonly<Record<string, ApplicationMenuCom
 export function collectMainMenuCommandStates(
   sections: readonly MainMenuSection[],
 ): MainMenuCommandState[] {
-  const states = new Map<ApplicationMenuCommand, boolean>();
+  const states = new Map<ApplicationMenuCommand, MainMenuCommandState>();
   const visit = (items: readonly MainMenuItem[], sectionEnabled: boolean) => {
     for (const item of items) {
       const command = APPLICATION_MENU_ITEM_COMMANDS[item.id];
-      if (command) states.set(command, sectionEnabled && !item.disabled);
+      if (command) states.set(command, { command, enabled: sectionEnabled && !item.disabled, label: item.label, ...(item.checked === undefined ? {} : { checked: item.checked }) });
       if (item.submenu) visit(item.submenu, sectionEnabled && !item.disabled);
     }
   };
   for (const section of sections) {
     const sectionEnabled = !section.disabled;
     if (section.id === "settings") {
-      states.set("settings", sectionEnabled);
+      states.set("settings", { command: "settings", enabled: sectionEnabled });
     }
     visit(section.items ?? [], sectionEnabled);
   }
-  return [...states].map(([command, enabled]) => ({ command, enabled }));
+  return [...states.values()];
 }
 
 export type MainMenuActions = {
+  readonly setViewMode?: (mode: "grid" | "masonry" | "list") => void;
+  readonly toggleSidebar?: () => void;
+  readonly toggleInspector?: () => void;
   readonly createLibrary: () => void;
   readonly openLibrary: () => void;
   readonly closeLibrary: () => void;
@@ -135,6 +145,10 @@ export type MainMenuActions = {
 };
 
 export type MainMenuState = {
+  readonly viewMode?: "grid" | "masonry" | "list";
+  readonly sidebarVisible?: boolean;
+  readonly inspectorVisible?: boolean;
+  readonly modalOpen?: boolean;
   readonly libraryOpen: boolean;
   readonly busy: boolean;
   readonly hasUndoableOperation: boolean;
@@ -276,6 +290,25 @@ export function buildMainMenuSections({
       label: label(locale, "shell.mainMenuView"),
       icon: "fit-window",
       items: [
+        ...(["grid", "masonry", "list"] as const).map((mode): MainMenuItem => ({
+          id: `canvas.view.${mode}`,
+          label: label(locale, `toolbar.${mode === "grid" ? "gridView" : mode === "masonry" ? "masonryView" : "listView"}`),
+          checked: (state.viewMode ?? "grid") === mode,
+          disabled: libraryDisabled || state.modalOpen || !actions.setViewMode,
+          onSelect: () => actions.setViewMode?.(mode),
+        })),
+        {
+          id: "view.toggle-sidebar",
+          label: label(locale, state.sidebarVisible === false ? "shell.showSidebar" : "shell.hideSidebar"),
+          disabled: appDisabled || state.modalOpen || !actions.toggleSidebar,
+          onSelect: () => actions.toggleSidebar?.(),
+        },
+        {
+          id: "view.toggle-inspector",
+          label: label(locale, state.inspectorVisible === false ? "shell.showInspector" : "shell.hideInspector"),
+          disabled: appDisabled || state.modalOpen || !actions.toggleInspector,
+          onSelect: () => actions.toggleInspector?.(),
+        },
         {
           id: "canvas.zoom-in",
           label: label(locale, "preview.zoomIn"),

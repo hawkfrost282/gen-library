@@ -57,40 +57,47 @@ export type ApplicationMenuRole =
   | "front";
 
 /** Commands sent from the native macOS menu to the canonical renderer menu. */
-export type ApplicationMenuCommand =
-  | "invert-selection"
-  | "copy-selection"
-  | "file.import-files"
-  | "file.import-folder"
-  | "file.import-linked-folder"
-  | "file.paste-image"
-  | "edit.undo"
-  | "edit.redo"
-  | "edit.paste"
-  | "edit.select-all"
-  | "edit.clear-selection"
-  | "canvas.zoom-in"
-  | "canvas.zoom-out"
-  | "canvas.zoom-reset"
-  | "window.toggle-fullscreen"
-  | "library.create"
-  | "library.open"
-  | "library.open-recent"
-  | "library.close"
-  | "library.remove"
-  | "library.delete-from-disk"
-  | "library.import"
-  | "library.import-eagle"
-  | "library.export"
-  | "library.settings"
-  | "library.show-missing-linked"
-  | "window.background-jobs"
-  | "window.diagnostics"
-  | "about.serpent"
-  | "about.github"
-  | "about.open-source"
-  | "about.diagnostics"
-  | "settings";
+export const APPLICATION_MENU_COMMANDS = [
+  "invert-selection",
+  "copy-selection",
+  "file.import-files",
+  "file.import-folder",
+  "file.import-linked-folder",
+  "file.paste-image",
+  "edit.undo",
+  "edit.redo",
+  "edit.paste",
+  "edit.select-all",
+  "edit.clear-selection",
+  "canvas.zoom-in",
+  "canvas.zoom-out",
+  "canvas.zoom-reset",
+  "window.toggle-fullscreen",
+  "library.create",
+  "library.open",
+  "library.open-recent",
+  "library.close",
+  "library.remove",
+  "library.delete-from-disk",
+  "library.import",
+  "library.import-eagle",
+  "library.export",
+  "library.settings",
+  "library.show-missing-linked",
+  "window.background-jobs",
+  "window.diagnostics",
+  "about.serpent",
+  "about.github",
+  "about.open-source",
+  "about.diagnostics",
+  "settings",
+  "canvas.view.grid",
+  "canvas.view.masonry",
+  "canvas.view.list",
+  "view.toggle-sidebar",
+  "view.toggle-inspector",
+] as const;
+export type ApplicationMenuCommand = (typeof APPLICATION_MENU_COMMANDS)[number];
 
 /** A native-menu command click, optionally carrying an item payload. */
 export type ApplicationMenuCommandEvent = {
@@ -98,6 +105,16 @@ export type ApplicationMenuCommandEvent = {
   /** Item-specific argument, e.g. the recent-library path to open. */
   readonly payload?: string;
 };
+
+/** Validate the native-menu bridge against the same inventory used by its types. */
+export function parseApplicationMenuCommandEvent(input: unknown): ApplicationMenuCommandEvent | null {
+  const record = typeof input === "string" ? { command: input } : input;
+  if (!record || typeof record !== "object") return null;
+  const { command, payload } = record as { command?: unknown; payload?: unknown };
+  if (typeof command !== "string" || !(APPLICATION_MENU_COMMANDS as readonly string[]).includes(command)) return null;
+  if (payload !== undefined && (typeof payload !== "string" || payload.length > 4096)) return null;
+  return { command: command as ApplicationMenuCommand, ...(typeof payload === "string" ? { payload } : {}) };
+}
 
 export type ApplicationMenuItemTemplate = {
   readonly role?: ApplicationMenuRole;
@@ -200,14 +217,24 @@ export function buildApplicationMenuTemplate(
   };
 
   const viewSubmenu: ApplicationMenuItemTemplate[] = [
-    { role: "reload", labelKey: "shell.mainMenuReload" },
-    { role: "forceReload", labelKey: "shell.mainMenuForceReload" },
+    // Reloading the renderer is a developer tool, not a browsing action.
     ...(options.showDevTools
-      ? ([{ role: "toggleDevTools", labelKey: "shell.mainMenuToggleDevTools" }] as const)
+      ? ([
+          { role: "reload", labelKey: "shell.mainMenuReload" },
+          { role: "forceReload", labelKey: "shell.mainMenuForceReload" },
+          { role: "toggleDevTools", labelKey: "shell.mainMenuToggleDevTools" },
+          { type: "separator" },
+        ] as const)
       : []),
-    { type: "separator" },
     ...(isMac
       ? [
+          { command: "canvas.view.grid", labelKey: "toolbar.gridView", type: "checkbox", checked: true } as const,
+          { command: "canvas.view.masonry", labelKey: "toolbar.masonryView", type: "checkbox" } as const,
+          { command: "canvas.view.list", labelKey: "toolbar.listView", type: "checkbox" } as const,
+          { type: "separator" } as const,
+          { command: "view.toggle-sidebar", labelKey: "shell.hideSidebar" } as const,
+          { command: "view.toggle-inspector", labelKey: "shell.hideInspector" } as const,
+          { type: "separator" } as const,
           shortcutItem("canvas.zoom-in", "preview.zoomIn", "canvas.zoom-in"),
           shortcutItem("canvas.zoom-out", "preview.zoomOut", "canvas.zoom-out"),
           shortcutItem("canvas.zoom-reset", "preview.fitWindow", "canvas.zoom-reset"),
@@ -223,9 +250,11 @@ export function buildApplicationMenuTemplate(
   ];
 
   const macAppMenu: ApplicationMenuItemTemplate = {
-    label: "Serpent",
+    label: "Gen Library",
     submenu: [
       { role: "about", labelKey: "shell.mainMenuAboutSerpent" },
+      { type: "separator" },
+      { command: "settings", labelKey: "shell.mainMenuSettingsEllipsis", accelerator: "Cmd+," },
       { type: "separator" },
       { role: "services", labelKey: "shell.mainMenuServices" },
       { type: "separator" },
@@ -354,20 +383,16 @@ export function buildApplicationMenuTemplate(
         commandItem("about.github", "shell.mainMenuVisitGitHub"),
         commandItem("about.open-source", "shell.mainMenuOpenSource"),
         commandItem("about.diagnostics", "settings.viewDiagnostics"),
-        { type: "separator" },
-        commandItem("settings", "shell.mainMenuSettings"),
       ]
     : [];
 
   return isMac
     ? [
         macAppMenu,
-        // User request: the library menu leads (right after the app menu), with
-        // 最近打开 as its own first-level menu beside it.
-        { labelKey: "shell.mainMenuLibrary", submenu: librarySubmenu },
         { labelKey: "shell.mainMenuFile", submenu: fileSubmenu },
         { labelKey: "shell.mainMenuEdit", submenu: editSubmenu },
         { labelKey: "shell.mainMenuView", submenu: viewSubmenu },
+        { labelKey: "shell.mainMenuLibrary", submenu: librarySubmenu },
         {
           labelKey: "shell.mainMenuWindow",
           submenu: [...windowSubmenu, ...windowBusinessSubmenu],

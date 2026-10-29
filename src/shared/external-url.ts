@@ -194,6 +194,8 @@ export interface SerpentShellApi {
     command: ApplicationMenuCommand,
     enabled: boolean,
   ): void;
+  /** Renderer → Main: sync a native menu item's checked state. */
+  setApplicationMenuCommandChecked(command: ApplicationMenuCommand, checked: boolean): void;
   /** Renderer → Main: sync a native menu item's current label. */
   setApplicationMenuCommandLabel(
     command: ApplicationMenuCommand,

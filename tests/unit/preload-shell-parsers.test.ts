@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
 
-import { parseReadAppLogResult, parseRevealAppLogResult } from '../../src/preload/bridge/shell';
+import { shell, parseReadAppLogResult, parseRevealAppLogResult } from '../../src/preload/bridge/shell';
 
 vi.mock('electron', () => ({
   ipcRenderer: {
@@ -52,4 +52,16 @@ test('parseReadAppLogResult keeps valid entries and maps unknown codes', () => {
     ok: false,
     code: 'read_failure',
   });
+});
+
+
+test('native menu bridge delivers shared commands and drops unknown commands', async () => {
+  const { ipcRenderer } = await import('electron');
+  const listener = vi.fn(); const off = shell.onApplicationMenuCommand(listener);
+  const handler = vi.mocked(ipcRenderer.on).mock.calls.at(-1)?.[1];
+  expect(handler).toBeDefined();
+  for (const command of ['file.paste-image','library.show-missing-linked','canvas.view.list']) handler?.({} as Electron.IpcRendererEvent, command);
+  handler?.({} as Electron.IpcRendererEvent, 'unknown.command');
+  expect(listener.mock.calls.map(([event]) => event.command)).toEqual(['file.paste-image','library.show-missing-linked','canvas.view.list']);
+  off(); expect(ipcRenderer.removeListener).toHaveBeenCalled();
 });

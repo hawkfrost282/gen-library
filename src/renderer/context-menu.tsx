@@ -18,6 +18,11 @@ import { useT } from "./i18n";
 import { isImeKeyboardEvent } from "./ime-safe-dismiss";
 import { MenuSurface, resolveMenuNodes } from "./ui/patterns";
 
+// Checked and ordinary menu items share one focus order. Keep selectors in
+// sync so keyboard navigation cannot silently skip column/view choices.
+const MENU_ITEM_SELECTOR = '[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]';
+const ENABLED_MENU_ITEM_SELECTOR = '[role="menuitem"]:not([aria-disabled="true"]), [role="menuitemcheckbox"]:not([aria-disabled="true"]), [role="menuitemradio"]:not([aria-disabled="true"])';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -344,7 +349,7 @@ export function ContextMenu({
     const raf = requestAnimationFrame(() => {
       const items = Array.from(
         menu.querySelectorAll<HTMLElement>(
-          '[role="menuitem"]:not([aria-disabled="true"])',
+          ENABLED_MENU_ITEM_SELECTOR,
         ),
       );
       const first = items[0];
@@ -358,7 +363,7 @@ export function ContextMenu({
       if (
         activeElement instanceof HTMLElement &&
         menu.contains(activeElement) &&
-        activeElement.matches('[role="menuitem"]:not([aria-disabled="true"])')
+        activeElement.matches(ENABLED_MENU_ITEM_SELECTOR)
       ) {
         initialFocusPendingRef.current = false;
         return;
@@ -367,7 +372,7 @@ export function ContextMenu({
       initialFocusPendingRef.current = false;
       const underPointer = document.elementFromPoint(position.x, position.y);
       const pointedItem = underPointer?.closest<HTMLElement>(
-        '[role="menuitem"]:not([aria-disabled="true"])',
+        ENABLED_MENU_ITEM_SELECTOR,
       );
       (pointedItem && menu.contains(pointedItem) ? pointedItem : first).focus();
     });
@@ -396,6 +401,14 @@ export function ContextMenu({
         ? e.code
         : undefined;
     if (!navigationKey && isImeKeyboardEvent(e.nativeEvent)) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      close();
+      return;
+    }
+    // Text fields embedded in a menu retain their editing keys.
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable)) return;
     const menu = e.currentTarget;
     initialFocusPendingRef.current = false;
     // A pointer hover may have queued a post-commit focus reassertion. Once
@@ -407,7 +420,7 @@ export function ContextMenu({
     }
 
     const items = Array.from(
-      menu.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+      menu.querySelectorAll<HTMLElement>(MENU_ITEM_SELECTOR),
     ).filter((el) => el.getAttribute("aria-disabled") !== "true");
     if (items.length === 0) return;
     if (navigationKey) {
@@ -431,9 +444,6 @@ export function ContextMenu({
     } else if (navigationKey === "End") {
       e.preventDefault();
       items[items.length - 1]?.focus();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      close();
     }
   };
 
@@ -460,7 +470,7 @@ export function ContextMenu({
           : undefined;
       if (!key) return;
       const items = Array.from(
-        menu.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+        menu.querySelectorAll<HTMLElement>(MENU_ITEM_SELECTOR),
       ).filter((item) => item.getAttribute("aria-disabled") !== "true");
       if (items.length === 0) return;
       event.preventDefault();
@@ -493,7 +503,7 @@ export function ContextMenu({
       const menu = document.getElementById(menuId);
       if (!(menu instanceof HTMLDivElement)) return;
       const pointed = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>(
-        '[role="menuitem"]:not([aria-disabled="true"])',
+        ENABLED_MENU_ITEM_SELECTOR,
       );
       const item = pointed && menu.contains(pointed) ? pointed : fallback;
       if (item?.isConnected && menu.contains(item)) item.focus({ preventScroll: true });
@@ -515,7 +525,7 @@ export function ContextMenu({
       onPointerMoveCapture={(event) => {
         const target = event.target;
         const item = target instanceof Element
-          ? target.closest<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])')
+          ? target.closest<HTMLElement>(ENABLED_MENU_ITEM_SELECTOR)
           : null;
         if (!item || !event.currentTarget.contains(item)) return;
         initialFocusPendingRef.current = false;
@@ -529,7 +539,7 @@ export function ContextMenu({
       onMouseMoveCapture={(event) => {
         const target = event.target;
         const item = target instanceof Element
-          ? target.closest<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])')
+          ? target.closest<HTMLElement>(ENABLED_MENU_ITEM_SELECTOR)
           : null;
         if (!item || !event.currentTarget.contains(item)) return;
         initialFocusPendingRef.current = false;
@@ -550,7 +560,7 @@ export function ContextMenu({
         // cannot leave the hovered item unfocused (notably after ArrowDown).
         const target = event.target;
         const item = target instanceof Element
-          ? target.closest<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])')
+          ? target.closest<HTMLElement>(ENABLED_MENU_ITEM_SELECTOR)
           : null;
         if (!item || !event.currentTarget.contains(item)) return;
         schedulePointerFocus(event.clientX, event.clientY, item);
@@ -558,7 +568,7 @@ export function ContextMenu({
       onMouseMove={(event) => {
         const target = event.target;
         const item = target instanceof Element
-          ? target.closest<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])')
+          ? target.closest<HTMLElement>(ENABLED_MENU_ITEM_SELECTOR)
           : null;
         if (!item || !event.currentTarget.contains(item)) return;
         schedulePointerFocus(event.clientX, event.clientY, item);

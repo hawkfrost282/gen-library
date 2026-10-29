@@ -98,7 +98,7 @@ export const toolbarCommandDefinitions: readonly ToolbarCommandDefinition[] = [
     group: 'open',
     run: (ctx) => ctx.actions.setViewMode('masonry'),
   },
-  { id: 'canvas.view.list', title: () => 'List view', group: 'open', run: (ctx) => ctx.actions.setViewMode('list') },
+  { id: 'canvas.view.list', title: (ctx) => t(ctx, 'toolbar.listView'), group: 'open', run: (ctx) => ctx.actions.setViewMode('list') },
   {
     id: 'canvas.field.name',
     title: (ctx) => t(ctx, 'toolbar.showFileName'),

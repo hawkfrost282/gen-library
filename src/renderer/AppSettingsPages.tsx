@@ -683,7 +683,7 @@ export function BrowseSettingsPage({
           >
             {t("toolbar.masonryView")}
           </button>
-          <button className="app-settings-option" type="button" role="radio" aria-checked={canvasPrefs.viewMode === "list"} onClick={() => onSetViewMode("list")}><Icon name="menu" size={18} />List</button>
+          <button className="app-settings-option" type="button" role="radio" aria-checked={canvasPrefs.viewMode === "list"} onClick={() => onSetViewMode("list")}><Icon name="menu" size={18} />{t("toolbar.listView")}</button>
         </div>
       </div>
       <div className="app-settings-card-divider" />

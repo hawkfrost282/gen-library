@@ -10,6 +10,9 @@ import { DEFAULT_SHORTCUT_BINDINGS, setShortcutOverride } from "../../src/shared
 
 function createActions(): MainMenuActions {
   return {
+    setViewMode: vi.fn(),
+    toggleSidebar: vi.fn(),
+    toggleInspector: vi.fn(),
     createLibrary: vi.fn(),
     openLibrary: vi.fn(),
     closeLibrary: vi.fn(),
@@ -262,4 +265,16 @@ describe("main-menu-items (Serpent-bnah)", () => {
     const file = sections.find((section) => section.id === "file");
     expect(file?.items?.find((item) => item.id === "file.paste-image")?.disabled).toBe(true);
   });
+});
+
+it("shares view actions and checked states while showing current panel actions", () => {
+  const { sections, actions } = build({ locale: "en", platform: "mac", state: { libraryOpen: true, busy: false, hasUndoableOperation: false, hasRedoableOperation: false, hasSelectedAssets: false, hasPasteTarget: true, hasBrowseAssets: true, showMissingLinkedFiles: true, viewMode: "list", sidebarVisible: false, inspectorVisible: true } });
+  const view = sections.find((section) => section.id === "view")!;
+  view.items?.find((item) => item.id === "canvas.view.grid")?.onSelect();
+  expect(actions.setViewMode).toHaveBeenCalledWith("grid");
+  expect(view.items?.find((item) => item.id === "view.toggle-sidebar")?.label).toBe("Show Sidebar");
+  expect(view.items?.find((item) => item.id === "view.toggle-inspector")?.label).toBe("Hide Inspector");
+  const states = collectMainMenuCommandStates(sections);
+  expect(states.find((item) => item.command === "canvas.view.list")).toMatchObject({ enabled: true, checked: true });
+  expect(states.find((item) => item.command === "canvas.view.grid")).toMatchObject({ checked: false });
 });

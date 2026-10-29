@@ -7332,9 +7332,12 @@ async function startApplication(): Promise<void> {
     if (!mainWindow || event.sender !== mainWindow.webContents) {
       return;
     }
-    const record = input as { command?: unknown; enabled?: unknown; label?: unknown } | null;
+    const record = input as { command?: unknown; enabled?: unknown; label?: unknown; checked?: unknown } | null;
     if (record === null || typeof record !== "object") return;
     if (typeof record.command !== "string") return;
+    if (typeof record.checked === "boolean") {
+      setApplicationMenuCommandChecked(record.command, record.checked);
+    }
     if (typeof record.enabled === "boolean") {
       setApplicationMenuCommandEnabled(record.command, record.enabled);
     }

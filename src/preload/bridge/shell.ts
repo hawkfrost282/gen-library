@@ -1,6 +1,6 @@
 import { ipcRenderer } from 'electron';
 
-import type { ApplicationMenuCommand, ApplicationMenuCommandEvent } from '../../shared/application-menu';
+import { parseApplicationMenuCommandEvent, type ApplicationMenuCommand, type ApplicationMenuCommandEvent } from '../../shared/application-menu';
 import {
   appLogAutomationCorrelationIdSchema,
   appLogFileNameSchema,
@@ -300,32 +300,9 @@ export const shell: SerpentShellApi = Object.freeze({
     };
   },
   onApplicationMenuCommand(listener: (event: ApplicationMenuCommandEvent) => void): () => void {
-    const commands: readonly ApplicationMenuCommand[] = [
-      'invert-selection', 'copy-selection',
-      'file.import-files', 'file.import-folder', 'file.import-linked-folder',
-      'edit.undo', 'edit.redo', 'edit.paste', 'edit.select-all', 'edit.clear-selection',
-      'canvas.zoom-in', 'canvas.zoom-out', 'canvas.zoom-reset', 'window.toggle-fullscreen',
-      'library.create', 'library.open', 'library.open-recent', 'library.close', 'library.remove',
-      'library.delete-from-disk', 'library.import', 'library.import-eagle', 'library.export', 'library.settings',
-      'window.background-jobs', 'window.diagnostics',
-      'about.serpent', 'about.github', 'about.open-source', 'about.diagnostics', 'settings',
-    ];
     const handler = (_event: Electron.IpcRendererEvent, input: unknown) => {
-      // Items with a payload arrive as { command, payload }.
-      if (typeof input === 'string') {
-        if (commands.includes(input as ApplicationMenuCommand)) {
-          listener({ command: input as ApplicationMenuCommand });
-        }
-        return;
-      }
-      if (typeof input !== 'object' || input === null) return;
-      const { command, payload } = input as { command?: unknown; payload?: unknown };
-      if (typeof command !== 'string') return;
-      if (!commands.includes(command as ApplicationMenuCommand)) return;
-      listener({
-        command: command as ApplicationMenuCommand,
-        ...(typeof payload === 'string' ? { payload } : {}),
-      });
+      const parsed = parseApplicationMenuCommandEvent(input);
+      if (parsed) listener(parsed);
     };
     ipcRenderer.on(APPLICATION_MENU_COMMAND_CHANNEL, handler);
     return () => {
@@ -335,6 +312,10 @@ export const shell: SerpentShellApi = Object.freeze({
   setApplicationMenuCommandEnabled(command: ApplicationMenuCommand, enabled: boolean): void {
     // Best-effort: the native menu may be absent (Windows hides it).
     void ipcRenderer.invoke(APPLICATION_MENU_ITEM_STATE_CHANNEL, { command, enabled })
+      .catch(() => undefined);
+  },
+  setApplicationMenuCommandChecked(command: ApplicationMenuCommand, checked: boolean): void {
+    void ipcRenderer.invoke(APPLICATION_MENU_ITEM_STATE_CHANNEL, { command, checked })
       .catch(() => undefined);
   },
   setApplicationMenuCommandLabel(command: ApplicationMenuCommand, label: string): void {

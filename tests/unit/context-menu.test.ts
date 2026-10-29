@@ -172,4 +172,32 @@ describe("ContextMenu focus lifecycle", () => {
     expect(menu?.classList.contains("is-keyboard-navigation")).toBe(true);
     expect(document.activeElement).toBe(items[1]);
   });
+  it("navigates checked items, skips unavailable choices and preserves text editing", async () => {
+    container = document.createElement("div"); document.body.append(container); root = createRoot(container);
+    const choose = vi.fn();
+    await act(async () => {
+      root?.render(createElement(LocaleProvider, null, createElement(ContextMenuProvider, null,
+        createElement(ContextMenu, { ariaLabel: "Columns", position: { x: 20, y: 20 }, children: createElement(Fragment, null,
+          createElement(ContextMenuItem, { label: "Sort", onAction: vi.fn() }),
+          createElement(ContextMenuItem, { label: "Name", checked: true, disabled: true, onAction: vi.fn() }),
+          createElement(ContextMenuItem, { label: "Prompt", checked: false, onAction: choose }),
+          createElement(ContextMenuItem, { label: "Model", checked: true, onAction: vi.fn() }),
+          createElement("input", { "aria-label": "Search columns" }),
+        ) }))));
+    });
+    const items = container.querySelectorAll<HTMLButtonElement>('button[role^="menuitem"]');
+    items[0]!.focus();
+    const press = async (element: HTMLElement, key: string) => {
+      const event = new KeyboardEvent("keydown", { key, code: key, bubbles: true, cancelable: true });
+      await act(async () => { element.dispatchEvent(event); }); return event;
+    };
+    await press(items[0]!, "ArrowDown"); expect(document.activeElement).toBe(items[2]);
+    await press(items[2]!, "End"); expect(document.activeElement).toBe(items[3]);
+    await press(items[3]!, "Home"); expect(document.activeElement).toBe(items[0]);
+    await act(async () => { items[2]!.click(); }); expect(choose).toHaveBeenCalledOnce();
+    const input = container.querySelector("input")!; input.focus();
+    expect((await press(input, "ArrowDown")).defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(input);
+  });
+
 });

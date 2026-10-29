@@ -200,11 +200,11 @@ describe('标题与 locale', () => {
   it('en 标题对齐 toolbar 文案', () => {
     const { ctx } = makeCtx({ locale: 'en' });
     const menu = registry.resolveMenu(ctx);
-    expect(findItem(menu, 'canvas.view.grid').label).toBe('Grid view');
+    expect(findItem(menu, 'canvas.view.grid').label).toBe('Grid View');
     expect(findItem(menu, 'canvas.refresh').label).toBe(
-      'Refresh disk changes',
+      'Refresh',
     );
-    expect(findItem(menu, 'workspace.ai-settings').label).toBe('AI settings');
+    expect(findItem(menu, 'workspace.ai-settings').label).toBe('AI Settings…');
   });
 });
 

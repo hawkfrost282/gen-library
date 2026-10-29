@@ -13591,6 +13591,10 @@ function AppInner() {
     locale,
     platform: SHORTCUT_PLATFORM,
     state: {
+      viewMode: assetViewMode,
+      sidebarVisible: leftOpen,
+      inspectorVisible: rightOpen,
+      modalOpen: dialogFocusTrapActive || encryptedDialogOpen,
       libraryOpen: Boolean(library),
       busy,
       hasUndoableOperation: editableTextFocused
@@ -13609,6 +13613,9 @@ function AppInner() {
       showMissingLinkedFiles,
     },
     actions: {
+      setViewMode: (mode) => setCanvasPrefs((prefs) => ({ ...prefs, viewMode: mode })),
+      toggleSidebar: () => setLeftOpen((open) => !open),
+      toggleInspector: () => setRightOpen((open) => !open),
       createLibrary: () => {
         setDialogValue(t("shell.myLibrary"));
         setCreateLibraryPhase("form");
@@ -13679,7 +13686,7 @@ function AppInner() {
       openAppLog,
       openAbout,
       openGitHub: () => {
-        void shellApi?.openExternalUrl("https://github.com/dolag233/Serpent");
+        void shellApi?.openExternalUrl("https://github.com/hawkfrost282/gen-library");
       },
       openOpenSourceLicenses: () => setOpenSourceLicensesOpen(true),
       revealAppLog,
@@ -13762,8 +13769,10 @@ function AppInner() {
 
   useEffect(() => {
     if (!shellApi) return;
-    for (const { command, enabled } of collectMainMenuCommandStates(mainMenuSections)) {
+    for (const { command, enabled, label, checked } of collectMainMenuCommandStates(mainMenuSections)) {
       shellApi.setApplicationMenuCommandEnabled(command, enabled);
+      if (label) shellApi.setApplicationMenuCommandLabel(command, label);
+      if (checked !== undefined) shellApi.setApplicationMenuCommandChecked(command, checked);
     }
   }, [mainMenuSections, shellApi]);
 
@@ -14242,7 +14251,7 @@ function AppInner() {
           <div className="toolbar-workspace-main">
             <div className="toolbar-workspace-leading">
             <OrganizationEntry key={library?.libraryId} libraryId={library?.libraryId} privateWorkspace={privateWorkspace} api={(window as RendererWindow).serpent?.organization} onVisibilityChange={setEncryptedDialogOpen} />
-            {activeSmartCollectionId ? <button className="secondary-button" type="button" onClick={() => { const folder = smartCollections.find((item) => item.collectionId === activeSmartCollectionId); if (folder) setSmartCollectionSettings({ collectionId: folder.collectionId, name: folder.name }); }}>Smart Folder rules</button> : null}
+            {activeSmartCollectionId ? <button className="secondary-button" type="button" onClick={() => { const folder = smartCollections.find((item) => item.collectionId === activeSmartCollectionId); if (folder) setSmartCollectionSettings({ collectionId: folder.collectionId, name: folder.name }); }}>Edit Smart Folder…</button> : null}
             <VaultEntry compact libraryId={library?.libraryId} libraryName={library?.displayName} selectedAssetIds={selectedAssetIds} api={(window as RendererWindow).serpent?.vault} onVisibilityChange={setEncryptedDialogOpen} />
               <ScopeHistoryButtons
                 // Serpent-b7e173：预览已是历史条目（打开查看器必压在某浏览 scope 上），
@@ -16649,7 +16658,7 @@ function AppInner() {
         onOpenGitHub={() => {
           const bridge = (window as RendererWindow).serpent?.shell;
           if (!bridge?.openExternalUrl) return;
-          void bridge.openExternalUrl("https://github.com/dolag233/Serpent");
+          void bridge.openExternalUrl("https://github.com/hawkfrost282/gen-library");
         }}
         onOpenReleaseNotes={(url) => {
           const bridge = (window as RendererWindow).serpent?.shell;

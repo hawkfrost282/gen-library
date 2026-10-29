@@ -47,9 +47,9 @@ describe("ImportLibraryChooserDialog external library open", () => {
         (button) => pattern.test(button.textContent ?? ""),
       );
 
-    expect(findButton(/打开 Eagle 资源库|Open Eagle library/)).toBeUndefined();
+    expect(findButton(/打开 Eagle 资源库|Open Eagle Library/)).toBeUndefined();
     expect(
-      findButton(/打开 Billfish 资源库|Open Billfish library/),
+      findButton(/打开 Billfish 资源库|Open Billfish Library/),
     ).toBeUndefined();
 
     const disclosure = findButton(/打开外部资源库|Open external library/);
@@ -61,8 +61,8 @@ describe("ImportLibraryChooserDialog external library open", () => {
     });
 
     expect(disclosure?.getAttribute("aria-expanded")).toBe("true");
-    const eagle = findButton(/打开 Eagle 资源库|Open Eagle library/);
-    const billfish = findButton(/打开 Billfish 资源库|Open Billfish library/);
+    const eagle = findButton(/打开 Eagle 资源库|Open Eagle Library/);
+    const billfish = findButton(/打开 Billfish 资源库|Open Billfish Library/);
     expect(eagle).toBeDefined();
     expect(eagle?.disabled).toBe(false);
     expect(eagle?.className).toContain("secondary-button");

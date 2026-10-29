@@ -46,7 +46,7 @@ describe("LibrarySwitcher external library action", () => {
       '[role="menuitem"]',
     )].find((button) => {
       const text = button.textContent ?? "";
-      return text.includes("打开资源库") || text === "Open library…";
+      return text.includes("打开资源库") || text === "Open Library…";
     });
     expect(openLibrary).toBeDefined();
 

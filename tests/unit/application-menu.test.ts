@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  APPLICATION_MENU_COMMANDS,
+  parseApplicationMenuCommandEvent,
   applicationMenuHasPageZoomRoles,
   buildApplicationMenuTemplate,
   collectApplicationMenuRoles,
@@ -56,7 +58,8 @@ describe("buildApplicationMenuTemplate (Serpent-46i9)", () => {
       }),
     );
     expect(roles).not.toContain("toggleDevTools");
-    expect(roles).toContain("reload");
+    expect(roles).not.toContain("reload");
+    expect(roles).not.toContain("forceReload");
   });
 
   it("includes the macOS app menu only on darwin", () => {
@@ -285,7 +288,7 @@ describe("macOS product menu mirror (Serpent-q0b1)", () => {
     // No custom item may carry a hardcoded display label — the Serpent app
     // menu name is the only hardcoded label (brand name is not localized).
     const hardcodedLabels = template.filter((item) => typeof item.label === "string");
-    expect(hardcodedLabels.map((item) => item.label)).toEqual(["Serpent"]);
+    expect(hardcodedLabels.map((item) => item.label)).toEqual(["Gen Library"]);
     // Every key resolves in BOTH catalogs (zh primary, en fallback).
     for (const key of keys) {
       expect(lookupMessage(zhCN, key), `zh key ${key}`).toBeDefined();
@@ -337,5 +340,40 @@ describe("shouldHideApplicationMenuBar (Serpent-znex)", () => {
     );
     expect(shouldHideApplicationMenuBar("win32")).toBe(true);
     expect(shouldHideApplicationMenuBar("darwin")).toBe(false);
+  });
+});
+
+
+describe("Mac menu conventions and command boundary", () => {
+  it("keeps the standard order and Settings in the app menu with Command-comma", () => {
+    const template = buildApplicationMenuTemplate({ platform: "darwin", showDevTools: false });
+    expect(template.map((item) => item.labelKey ?? item.label)).toEqual([
+      "Gen Library", "shell.mainMenuFile", "shell.mainMenuEdit", "shell.mainMenuView",
+      "shell.mainMenuLibrary", "shell.mainMenuWindow", "shell.mainMenuHelp",
+    ]);
+    expect(template[0]?.submenu).toContainEqual(expect.objectContaining({ command: "settings", accelerator: "Cmd+," }));
+    expect(template.at(-1)?.submenu?.some((item) => item.command === "settings")).toBe(false);
+    const view = template.find((item) => item.labelKey === "shell.mainMenuView");
+    expect(view?.submenu).toEqual(expect.arrayContaining([
+      expect.objectContaining({ command: "canvas.view.list", type: "checkbox" }),
+      expect.objectContaining({ command: "view.toggle-sidebar" }),
+      expect.objectContaining({ command: "view.toggle-inspector" }),
+    ]));
+  });
+
+  it("accepts every native-menu command, including paste-image and missing-file visibility", () => {
+    const template = buildApplicationMenuTemplate({ platform: "darwin", showDevTools: false });
+    const visit = (items: readonly ApplicationMenuItemTemplate[]) => {
+      for (const item of items) {
+        if (item.command) expect(parseApplicationMenuCommandEvent(item.command)?.command).toBe(item.command);
+        if (item.submenu) visit(item.submenu);
+      }
+    };
+    visit(template);
+    expect(new Set(APPLICATION_MENU_COMMANDS).size).toBe(APPLICATION_MENU_COMMANDS.length);
+    expect(parseApplicationMenuCommandEvent("file.paste-image")).toEqual({ command: "file.paste-image" });
+    expect(parseApplicationMenuCommandEvent("library.show-missing-linked")).toEqual({ command: "library.show-missing-linked" });
+    expect(parseApplicationMenuCommandEvent({ command: "library.open-recent", payload: "/Library/demo" })).toEqual({ command: "library.open-recent", payload: "/Library/demo" });
+    for (const input of [null, 5, {}, "unknown.command", { command: "settings", payload: {} }, { command: "settings", payload: "x".repeat(4097) }]) expect(parseApplicationMenuCommandEvent(input)).toBeNull();
   });
 });

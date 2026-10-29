@@ -98,3 +98,25 @@
 | 白板 | 类似 PureRef 的独立自由布局文档，可引用资产库中的资产；不进入 MVP。 | 已确认 |
 | 源链接 | 浏览器扩展保存网页图片或视频时记录的用户所见网页地址；它是文件资产的元数据，不是媒体直链或独立书签资产。 | 已确认 |
 | 疑似重复 | 文件名和文件大小均相同的两项资产；系统只提示用户，不自动跳过或合并。 | 已确认 |
+
+
+## Gen Library product vocabulary (English)
+
+Voice: calm, direct, brief. Interface writing rules: [UI_WRITING_GUIDE.md](UI_WRITING_GUIDE.md). The fork definitions below supersede conflicting upstream product descriptions above; internal protocol names remain compatible.
+
+| Term | Means | Avoid in product UI |
+| --- | --- | --- |
+| File | An image, video, document or other managed item | entity, record, payload |
+| Library | Managed files, metadata and generated previews in an accessible on-disk directory | opaque photo-library package |
+| Folder | A real directory holding canonical files | using folder for a virtual Collection |
+| Collection | A manual virtual group; files can be in many | moving files when adding membership |
+| Smart Folder | A saved rule view with manual inclusion/exclusion | smart collection; implying it moves files |
+| Vault | Optional encrypted physical storage | encrypted library as a second UI name |
+| Private workspace | The isolated window for an unlocked Vault | implying files are inaccessible while unlocked |
+| Rating | A personal 0–5-star score; 0 is unrated | confusing it with content level |
+| Favorite | A separate marker for standout files | implying favorite changes the rating |
+| Character | Character identity recorded in metadata/tags | assuming it always determines a physical folder |
+| Content level | A classification such as NSFW | treating it as quality |
+| Show in Finder | Reveal an existing file or open its containing physical folder | exposing database/cache internals by default |
+| Move to Trash | A recoverable removal | Delete for recoverable removal |
+| Delete | Permanent removal with the existing confirmation | Clear or Erase when bytes are removed |

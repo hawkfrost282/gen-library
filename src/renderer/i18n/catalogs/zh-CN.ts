@@ -15,6 +15,44 @@ import type { MessageTree } from '../types';
  *   call-site migration should compose with placeholders rather than one mega-template.
  */
 export const zhCN = {
+  listView: {
+    noColumns: "没有匹配的列。",
+    "reading": "正在读取本地元数据…",
+    "fileOne": "1 个文件",
+    "files": "{count} 个文件",
+    "folderOne": "1 个文件夹",
+    "folders": "{count} 个文件夹",
+    "sortedBy": "排序：{column} {direction}",
+    "thumbnails": "显示缩略图",
+    "columns": "选择列…",
+    "refresh": "刷新",
+    "tableLabel": "资源库文件",
+    "preview": "预览",
+    "previous": "上一页",
+    "next": "下一页",
+    "pageRange": "{first}–{last}，共 {total}",
+    "empty": "没有符合当前视图的文件。",
+    "readFailed": "无法读取列表，请尝试刷新。",
+    "rangeLimit": "每次最多选择 10,000 个文件。",
+    "unrated": "未评分",
+    "folder": "文件夹",
+    "columnOptions": "列选项",
+    "sortAscending": "升序",
+    "sortDescending": "降序",
+    "hideColumn": "隐藏列",
+    "moveLeft": "向左移动列",
+    "moveRight": "向右移动列",
+    "visibleColumns": "可见列",
+    "chooserTitle": "选择列",
+    "reset": "重置列",
+    "done": "完成",
+    "search": "搜索列",
+    "help": "选择列表视图显示的元数据。名称列始终显示。",
+    "moreHelp": "使用列",
+    "instructions": "单击列标题排序，右键查看列选项。拖动列边缘调整宽度，或聚焦边缘后使用方向键。完整元数据仍在图像详情中。",
+    "resize": "调整 {column} 的宽度",
+    "copyValue": "复制{column}"
+},
   tabs: {
     label: "工作区标签页",
     add: "新建标签页",
@@ -64,6 +102,12 @@ export const zhCN = {
     sentenceEnd: "。"
   },
   shell: {
+    mainMenuSettingsEllipsis: "设置…",
+    showSidebar: "显示侧边栏",
+    hideSidebar: "隐藏侧边栏",
+    showInspector: "显示检查器",
+    hideInspector: "隐藏检查器",
+
     expandNav: "展开导航",
     collapseNav: "收起导航",
     expandInspector: "展开检查器",
@@ -281,6 +325,7 @@ export const zhCN = {
     menuAriaLabel: "标签操作（{count} 个）"
   },
   toolbar: {
+    listView: "列表视图",
     libraryFilesFinder: "在 Finder 中打开资源库文件",
     libraryFilesExplorer: "在文件资源管理器中打开资源库文件",
     libraryFilesHint: "打开此资源库实际的 Assets 文件夹。导入文件以普通文件存储在这里；原始源文件保持原位。",

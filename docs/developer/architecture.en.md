@@ -79,3 +79,10 @@ Plugins (sandboxed UI + Host API), automation scripts (isolated QuickJS), and MC
 - Process isolation and least privilege: no Node in the Renderer, Main never touches the database
 - Data compatibility is a release-level gate (Serpent-033e / ADR-0028 / 0031)
 - Native-platform builds only (no cross-packaging); the release pipeline carries end-to-end gates
+
+
+## Interface commands and writing
+
+The focused personal.9 cleanup keeps the existing process boundaries. `src/shared/application-menu.ts` owns the native command inventory and event parser; the preload bridge accepts that same inventory rather than maintaining a second allowlist. Native menus and the in-app menu call the renderer's existing action handlers. The renderer publishes availability, labels and checkmarks back to its own window's menu. Shared context-menu focus logic covers ordinary, checkbox and radio menu items.
+
+Reusable English actions remain in the existing translation catalogs. Use [the interface writing guide](../UI_WRITING_GUIDE.md) and [product glossary](../glossary.md) for changed UI. List cell formatting and column discovery are separate from file selection, queries and storage. No UI label is a file-movement policy. The architecture review and deliberately deferred work are in [BAMA_POLISH_REVIEW.md](../BAMA_POLISH_REVIEW.md).

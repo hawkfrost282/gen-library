@@ -16,7 +16,7 @@ import { isImeKeyboardEvent } from "./ime-safe-dismiss";
 import type { MainMenuItem, MainMenuSection } from "./main-menu-items";
 import { MenuSurface, resolveMenuNodes } from "./ui/patterns";
 
-const MENU_ITEM_SELECTOR = '[role="menuitem"]:not([aria-disabled="true"])';
+const MENU_ITEM_SELECTOR = '[role="menuitem"]:not([aria-disabled="true"]), [role="menuitemcheckbox"]:not([aria-disabled="true"])';
 const MAIN_MENU_SURFACE_NODES = resolveMenuNodes([
   { id: "main-menu-content", kind: "separator" as const },
 ]);
@@ -70,7 +70,7 @@ function MenuItemButton({
       onMouseEnter={() => {
         if (!item.disabled) onHover?.();
       }}
-      role="menuitem"
+      role={item.checked === undefined ? "menuitem" : "menuitemcheckbox"}
       tabIndex={-1}
       type="button"
     >

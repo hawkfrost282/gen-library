@@ -12,10 +12,10 @@ it('keeps capacity advanced by default and clears the password after a successfu
   const request = vi.fn(async (input: VaultRequest): Promise<VaultStatus> => input.operation === 'expand' ? { ...state, notice: 'The capacity ceiling was increased.' } : state);
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
   await act(async () => { root!.render(createElement(VaultEntry, { api: { request } })); });
-  await act(async () => { container!.querySelector<HTMLButtonElement>('[aria-label="Encrypted libraries"]')!.click(); });
-  const advanced = container.querySelector('details')!; expect(advanced.open).toBe(false);
+  await act(async () => { container!.querySelector<HTMLButtonElement>('[aria-label="Vaults"]')!.click(); });
+  const advanced = container.querySelector('.vault-capacity-settings') as HTMLDetailsElement; expect(advanced.open).toBe(false);
   expect(container.textContent).toContain('does not reserve its full capacity');
-  const button = [...container.querySelectorAll('button')].find((item) => item.textContent === 'Increase existing vault capacity…')!;
+  const button = [...container.querySelectorAll('button')].find((item) => item.textContent === 'Increase Vault Capacity…')!;
   expect(button.disabled).toBe(true);
   const password = container.querySelector<HTMLInputElement>('input[type="password"]')!;
   const capacity = container.querySelector<HTMLInputElement>('input[type="number"]')!;

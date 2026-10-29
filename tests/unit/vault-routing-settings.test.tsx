@@ -21,7 +21,7 @@ it('blocks a locked destination and submits the reviewed folder with its exact p
   const status: VaultStatus = { supported: true, privateWorkspace: false, privateLibraryPath: null, sessions: [], routing: { config: { ...DEFAULT_ROUTING_CONFIG, enabled: true, vaultImage: '/synthetic/Private.sparsebundle' }, busy: false, pending: [{ id, name: 'Synthetic.png', tags: ['NSFW', 'Character: Momo'], folder: 'Momo' }] } };
   const render = async () => { await act(async () => root!.render(createElement(VaultRoutingSettings, { status, busy: false, send }))); };
   await render();
-  const move = () => [...container!.querySelectorAll('button')].find((button) => button.textContent === 'Move next file')!;
+  const move = () => [...container!.querySelectorAll('button')].find((button) => button.textContent === 'Move Next File')!;
   expect(move().disabled).toBe(true); expect(container!.textContent).toContain('Unlock the destination Vault');
   status.sessions = [{ id, name: 'Private', image: '/synthetic/Private.sparsebundle', running: true }]; await render();
   expect(move().disabled).toBe(false); await act(async () => move().click());

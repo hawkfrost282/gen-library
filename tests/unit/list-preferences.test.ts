@@ -1,5 +1,5 @@
 import { expect,it } from 'vitest';
-import { DEFAULT_LIST_PREFERENCES,loadListPreferences,saveListPreferences } from '../../src/renderer/list-preferences';
+import { DEFAULT_LIST_PREFERENCES,loadListPreferences,saveListPreferences,resetListColumns } from '../../src/renderer/list-preferences';
 import { TABLE_COLUMNS,compareTableValues } from '../../src/shared/asset-table';
 it('keeps column choices, widths, thumbnails and sorting separate for each Library',() => {
  const values=new Map<string,string>(); const storage={ getItem: (key:string)=>values.get(key)??null,setItem:(key:string,value:string)=>{ values.set(key,value); } };
@@ -13,4 +13,9 @@ it('recovers invalid preferences and always keeps the name column visible',() =>
 it('orders numbers and very large seeds precisely with blanks last in either direction',() => {
  const seed=TABLE_COLUMNS.find((c)=>c.id==='generation.seed')!;expect(compareTableValues('18446744073709551614','18446744073709551615',seed,'asc')).toBeLessThan(0);
  expect(compareTableValues(null,'10',seed,'desc')).toBeGreaterThan(0); const stars=TABLE_COLUMNS.find((c)=>c.id==='rating')!;expect(compareTableValues(2,10,stars,'asc')).toBeLessThan(0);
+});
+
+it('resets only column layout while preserving sort and thumbnails', () => {
+ const prefs={...structuredClone(DEFAULT_LIST_PREFERENCES), columns:['name','generation.seed'],widths:{name:400},thumbnails:true,sort:{column:'rating',order:'desc' as const}};
+ const next=resetListColumns(prefs);expect(next.columns).toEqual(DEFAULT_LIST_PREFERENCES.columns);expect(next.widths).toEqual({});expect(next.sort).toEqual(prefs.sort);expect(next.thumbnails).toBe(true);expect(prefs.widths.name).toBe(400);
 });
